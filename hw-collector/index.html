@@ -604,7 +604,6 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
   </div>
 </div>
 
-</script>
 
 <script>
 const HWDATA = {};
@@ -2725,9 +2724,7 @@ function closePremium(){ document.getElementById('premium-modal').classList.remo
 
 function upgradePremium(){
   // In production: integrate with Google Play Billing or Stripe
-  alert('Payment integration coming soon!
-
-For now, premium is unlocked for demo.');
+  alert('Payment integration coming soon! For now, premium is unlocked for demo.');
   isPremium = true;
   logEvent('premium_upgrade', {method:'demo'});
   closePremium();
