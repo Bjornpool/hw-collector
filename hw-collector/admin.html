@@ -339,13 +339,28 @@ async function adminLogin(){
       body:JSON.stringify({email, password:pass})
     });
     const data = await res.json();
-    const token = data.session?.access_token || data.access_token;
-    if(!token){ errEl.textContent = data.error_description || 'Login failed'; errEl.style.display='block'; return; }
+    // Handle both old and new Supabase response formats
+    const token = data.access_token || data.session?.access_token;
+    const user = data.user || (data.session && data.session.user);
+    
+    if(!token || !user){
+      errEl.textContent = data.error_description || data.msg || 'Login failed';
+      errEl.style.display='block'; return;
+    }
 
-    // Check if admin
-    const profile = await sbFetch('profiles?id=eq.'+data.user.id+'&select=is_admin,email', token);
-    if(!profile || !profile[0]?.is_admin){
-      errEl.textContent = 'Access denied. Admin only.'; errEl.style.display='block'; return;
+    // Check if admin - use token directly
+    const profileRes = await fetch(SUPABASE_URL+'/rest/v1/profiles?id=eq.'+user.id+'&select=is_admin,email', {
+      headers:{
+        'apikey': SUPABASE_KEY,
+        'Authorization': 'Bearer '+token,
+        'Content-Type': 'application/json'
+      }
+    });
+    const profile = await profileRes.json();
+    
+    if(!profile || !profile.length || !profile[0].is_admin){
+      errEl.textContent = 'Access denied. Admin only. (profile: '+JSON.stringify(profile)+')';
+      errEl.style.display='block'; return;
     }
 
     adminToken = token;
