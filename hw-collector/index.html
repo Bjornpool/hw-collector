@@ -2232,7 +2232,6 @@ function enterApp(){
   if(!canAccessYear(currentYear)){
     currentYear = FREE_YEARS[0];
   }
-  console.log('enterApp: year='+currentYear, 'HWDATA[2024]='+typeof HWDATA[2024], 'len='+(window['HW'+currentYear]||[]).length, 'canAccess='+canAccessYear(currentYear), 'premium='+isPremium);
   setListHeight();
   buildYearBar();
   populateSeries();
@@ -2269,14 +2268,23 @@ async function supabaseFetch(path, method='GET', body=null){
       'apikey': SUPABASE_KEY,
       'Authorization': 'Bearer ' + currentToken,
       'Content-Type': 'application/json',
-      'Prefer': method==='POST' ? 'return=minimal,resolution=merge-duplicates' : ''
+      'Prefer': method==='POST' ? 'return=minimal,resolution=merge-duplicates' : method==='PATCH' ? 'return=minimal' : ''
     }
   };
   if(body) opts.body = JSON.stringify(body);
-  const res = await fetch(SUPABASE_URL + '/rest/v1/' + path, opts);
-  if(!res.ok) return null;
-  const text = await res.text();
-  return text ? JSON.parse(text) : null;
+  try {
+    const res = await fetch(SUPABASE_URL + '/rest/v1/' + path, opts);
+    if(!res.ok){
+      const err = await res.text();
+      console.warn('Supabase error:', path, err);
+      return null;
+    }
+    const text = await res.text();
+    return text ? JSON.parse(text) : [];
+  } catch(e){
+    console.warn('Supabase fetch error:', e);
+    return null;
+  }
 }
 
 async function syncToSupabase(year, carId, type, value){
