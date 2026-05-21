@@ -2164,7 +2164,7 @@ async function handleAuth(){
     let endpoint, bodyData;
     if(authTab === 'login'){
       endpoint = `${SUPABASE_URL}/auth/v1/token?grant_type=password`;
-      bodyData = {email, password, options:{emailRedirectTo:'https://hw-collector-app.netlify.app'}};
+      bodyData = {email, password, options:{emailRedirectTo:'https://hw-collector.vercel.app'}};
     } else {
       endpoint = `${SUPABASE_URL}/auth/v1/signup`;
       bodyData = {email, password};
