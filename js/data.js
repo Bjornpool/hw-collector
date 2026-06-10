@@ -1134,6 +1134,8 @@ HWDATA[2025] = [
   {id:434,col:247,toy:"JJM43",name:"Ford RS200",series:"Peak Pursuit",seriesNum:"9/10",note:"2nd Color",tags:"New in Mainline Dollar General Exclusive"},
   {id:435,col:248,toy:"HYW29",name:"Polestar TRX",series:"Peak Pursuit",seriesNum:"10/10",tags:"New for 2025!"},
   {id:436,col:249,toy:"JBC34",name:"Triumph TR6",series:"HW Track Champs",seriesNum:"5/5",tags:"Treasure Hunt"},
+  {id:437,col:250,toy:"HYW53",name:"1983 Porsche 928S",series:"Muscle Mania",seriesNum:"10/10",tags:"New for 2025!"},
+  {id:438,col:250,toy:"JJM42",name:"1983 Porsche 928S",series:"Muscle Mania",seriesNum:"10/10",note:"2nd Color",tags:"New for 2025! Dollar General Exclusive"},
 ];
 
 HWDATA[2026] = [
