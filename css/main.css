@@ -138,7 +138,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 
 .car-actions{display:flex;align-items:center;gap:6px;flex-shrink:0}
 .owned-btn{
-  width:36px;height:36px;border-radius:50%;border:2px solid var(--border);
+  width:40px;height:40px;border-radius:50%;border:2px solid var(--border);
   background:none;cursor:pointer;display:flex;align-items:center;
   justify-content:center;transition:all .15s;flex-shrink:0;
 }
@@ -149,8 +149,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
   transform:rotate(-45deg) translateY(-1px);display:block;
 }
 .wish-btn{
-  width:32px;height:32px;border-radius:50%;border:none;
-  background:none;cursor:pointer;font-size:16px;
+  width:36px;height:36px;border-radius:50%;border:none;
+  background:none;cursor:pointer;font-size:18px;
   display:flex;align-items:center;justify-content:center;
   opacity:.35;transition:opacity .15s;
 }
@@ -384,10 +384,11 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
   #header{padding:8px 12px 6px}
   #year-bar{padding:8px 10px;gap:4px}
   #controls{padding:6px 10px}
-  .car-col{font-size:13px}
+  .car-thumb{width:40px;height:28px}
+  .car-col{min-width:26px;font-size:13px}
   .car-name{font-size:15px}
-  .series-badge{max-width:100px}
-  .car-actions{gap:8px}
+  .series-badge{max-width:90px;font-size:8px}
+  .car-actions{gap:4px}
 }
 
 /* ===== LAYOUT ===== */
