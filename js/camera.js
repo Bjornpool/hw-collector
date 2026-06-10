@@ -161,14 +161,34 @@ function shootPhoto(){
   const flash = document.getElementById('camera-flash');
   flash.style.transition='none'; flash.style.opacity='1';
   setTimeout(()=>{ flash.style.transition='opacity .35s'; flash.style.opacity='0'; }, 80);
+
+  const guideBox = document.querySelector('.camera-guide-box');
+  const videoRect = v.getBoundingClientRect();
+  const boxRect = guideBox.getBoundingClientRect();
+
+  const scaleX = v.videoWidth / videoRect.width;
+  const scaleY = v.videoHeight / videoRect.height;
+  let cropX = (boxRect.left - videoRect.left) * scaleX;
+  let cropY = (boxRect.top - videoRect.top) * scaleY;
+  const cropW = boxRect.width * scaleX;
+  const cropH = boxRect.height * scaleY;
+
   const canvas = document.createElement('canvas');
-  const scale = Math.min(1, 1200/v.videoWidth);
-  canvas.width = Math.round(v.videoWidth*scale);
-  canvas.height = Math.round(v.videoHeight*scale);
+  canvas.width = Math.round(cropW);
+  canvas.height = Math.round(cropH);
   const ctx = canvas.getContext('2d');
-  if(facingMode==='user'){ ctx.translate(canvas.width,0); ctx.scale(-1,1); }
-  ctx.drawImage(v,0,0,canvas.width,canvas.height);
-  savePhoto(canvas.toDataURL('image/jpeg',.85));
+
+  if(facingMode === 'user'){
+    // Mirror: flip horizontally, adjust cropX to mirrored position
+    const mirroredX = v.videoWidth - cropX - cropW;
+    ctx.translate(canvas.width, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(v, mirroredX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+  } else {
+    ctx.drawImage(v, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+  }
+
+  savePhoto(canvas.toDataURL('image/jpeg', .85));
 }
 
 function openGallery(){ document.getElementById('gallery-input').click(); }
