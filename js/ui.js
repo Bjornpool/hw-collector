@@ -51,15 +51,29 @@ function closeAccount(){ document.getElementById('account-modal').classList.remo
 function signOut(){
   if(!confirm('Sign out?')) return;
   closeAccount();
-  document.getElementById('app').style.display='none';
-  document.getElementById('auth-screen').style.display='flex';
-  userId=null; userEmail=''; isGuest=false; currentToken=null;
-  YEARS.forEach(y=>{owned[y]=new Set(); wished[y]=new Set();});
+
+  const emailEl = document.getElementById('auth-email');
+  const passEl  = document.getElementById('auth-password');
+  console.log('[signOut] emailEl:', emailEl, '| passEl:', passEl);
+
+  // Block autofill before auth-screen becomes visible
+  emailEl.setAttribute('readonly', true);
+  passEl.setAttribute('readonly', true);
+  emailEl.value = '';
+  passEl.value  = '';
+
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('auth-screen').style.display = 'flex';
+
+  userId = null; userEmail = ''; isGuest = false; currentToken = null;
+  YEARS.forEach(y => { owned[y] = new Set(); wished[y] = new Set(); });
   switchAuthTab('login');
+
+  // Release readonly after autofill window passes
   setTimeout(() => {
-    document.getElementById('auth-email').value = '';
-    document.getElementById('auth-password').value = '';
-  }, 100);
+    emailEl.removeAttribute('readonly');
+    passEl.removeAttribute('readonly');
+  }, 500);
 }
 
 // ===================== EXPORT =====================
