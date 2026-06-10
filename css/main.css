@@ -384,6 +384,10 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
   #header{padding:8px 12px 6px}
   #year-bar{padding:8px 10px;gap:4px}
   #controls{padding:6px 10px}
+  .filter-row{flex-direction:column;gap:4px}
+  #filter-series{width:100%}
+  .tabs{width:100%}
+  .tab{font-size:10px;padding:6px 2px}
   .car-thumb{width:40px;height:28px}
   .car-col{min-width:26px;font-size:13px}
   .car-name{font-size:15px}
