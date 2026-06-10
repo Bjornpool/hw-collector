@@ -25,21 +25,23 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
-  // Only handle GET requests
-  if (e.request.method !== 'GET') return;
-  // Skip Supabase API calls — always go network
-  if (e.request.url.includes('supabase.co')) return;
+  if(e.request.method !== 'GET') return;
+  if(e.request.url.includes('supabase.co')) return;
 
-  e.respondWith(
-    caches.match(e.request).then(cached => {
-      if (cached) return cached;
-      return fetch(e.request).then(response => {
-        if (response && response.status === 200 && response.type === 'basic') {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(e.request, clone));
-        }
-        return response;
-      }).catch(() => cached);
-    })
-  );
+  const url = new URL(e.request.url);
+
+  // CSS and JS — network first, cache as fallback
+  if(url.pathname.endsWith('.css') || url.pathname.endsWith('.js')){
+    e.respondWith(
+      fetch(e.request).then(res => {
+        const clone = res.clone();
+        caches.open(CACHE_NAME).then(c => c.put(e.request, clone));
+        return res;
+      }).catch(() => caches.match(e.request))
+    );
+    return;
+  }
+
+  // Everything else — cache first, network as fallback
+  e.respondWith(caches.match(e.request).then(r => r || fetch(e.request)));
 });
