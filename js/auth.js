@@ -273,6 +273,15 @@ function enterApp(){
 
 document.addEventListener('DOMContentLoaded', () => {
   initPasswordRecovery();
+  document.getElementById('auth-email').addEventListener('keydown', e => {
+    if(e.key === 'Enter') document.getElementById('auth-password').focus();
+  });
+  document.getElementById('auth-password').addEventListener('keydown', e => {
+    if(e.key === 'Enter') handleAuth();
+  });
+  document.getElementById('auth-name')?.addEventListener('keydown', e => {
+    if(e.key === 'Enter') handleAuth();
+  });
   document.getElementById('reset-email').addEventListener('keydown', e => {
     if(e.key === 'Enter') sendResetLink();
   });
