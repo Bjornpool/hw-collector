@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HW Collector — Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+
+<!-- AUTH -->
+<div id="auth-wrap">
+  <div class="auth-box">
+    <h1>HW COLLECTOR</h1>
+    <p>Admin Panel — authorized access only</p>
+    <div id="auth-err" class="auth-err"></div>
+    <input type="email" id="adm-email" class="inp" placeholder="Admin email" autocomplete="email">
+    <input type="password" id="adm-pass" class="inp" placeholder="Password">
+    <button class="btn-primary" onclick="adminLogin()">SIGN IN</button>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div class="topbar">
+    <div class="topbar-logo">HW.COLLECTOR <span>Admin Panel</span></div>
+    <div class="topbar-spacer"></div>
+    <div class="topbar-user" id="adm-user-label"></div>
+    <button class="btn-signout" onclick="adminSignOut()">Sign out</button>
+  </div>
+
+  <div class="sidebar">
+    <div class="nav-section">Overview</div>
+    <div class="nav-item active" onclick="showPage('dashboard')">
+      <span class="nav-icon">📊</span> Dashboard
+    </div>
+    <div class="nav-section">Users</div>
+    <div class="nav-item" onclick="showPage('users')">
+      <span class="nav-icon">👥</span> All Users
+    </div>
+    <div class="nav-item" onclick="showPage('premium')">
+      <span class="nav-icon">⭐</span> Premium
+    </div>
+    <div class="nav-section">Content</div>
+    <div class="nav-item" onclick="showPage('database')">
+      <span class="nav-icon">🚗</span> Car Database
+    </div>
+    <div class="nav-item" onclick="showPage('popular')">
+      <span class="nav-icon">🏆</span> Popular Models
+    </div>
+    <div class="nav-section">System</div>
+    <div class="nav-item" onclick="showPage('logs')">
+      <span class="nav-icon">📋</span> Activity Logs
+    </div>
+    <div class="nav-item" onclick="showPage('export')">
+      <span class="nav-icon">📤</span> Export Data
+    </div>
+  </div>
+
+  <div class="main">
+    <!-- DASHBOARD -->
+    <div id="page-dashboard" class="page active">
+      <div class="page-title">Dashboard</div>
+      <div class="stats-grid" id="stats-grid">
+        <div class="stat-card"><div class="stat-label">Loading...</div></div>
+      </div>
+      <div class="section-card">
+        <div class="section-header"><span class="section-title">🏆 Most Collected Models</span></div>
+        <div id="popular-chart" class="loading">Loading...</div>
+      </div>
+      <div class="section-card">
+        <div class="section-header"><span class="section-title">📋 Recent Activity</span></div>
+        <div id="recent-logs"></div>
+      </div>
+    </div>
+
+    <!-- USERS -->
+    <div id="page-users" class="page">
+      <div class="page-title">All Users</div>
+      <div class="section-card">
+        <div class="section-header">
+          <input class="table-search" placeholder="Search by email..." oninput="filterUsers(this.value)" style="max-width:280px">
+          <div class="section-actions">
+            <button class="btn-sm" onclick="loadUsers()">↻ Refresh</button>
+            <button class="btn-sm" onclick="exportUsers()">Export CSV</button>
+          </div>
+        </div>
+        <div id="users-table"><div class="loading">Loading users...</div></div>
+      </div>
+    </div>
+
+    <!-- PREMIUM -->
+    <div id="page-premium" class="page">
+      <div class="page-title">Premium Users</div>
+      <div class="section-card">
+        <div class="section-header">
+          <span class="section-title">Active Premium Accounts</span>
+          <div class="section-actions">
+            <button class="btn-sm success" onclick="grantPremiumByEmail()">+ Grant Premium</button>
+          </div>
+        </div>
+        <div id="premium-table"><div class="loading">Loading...</div></div>
+      </div>
+    </div>
+
+    <!-- CAR DATABASE -->
+    <div id="page-database" class="page">
+      <div class="page-title">Car Database</div>
+      <div class="section-card">
+        <div class="section-header">
+          <span class="section-title">Browse &amp; Edit Models</span>
+          <div class="section-actions">
+            <select class="btn-sm" id="db-year-filter" onchange="filterDB()" style="padding:6px 10px">
+              <option value="2024">2024</option>
+              <option value="2025">2025</option>
+              <option value="2026">2026</option>
+              <option value="2023">2023</option>
+            </select>
+            <input class="table-search" placeholder="Search..." oninput="filterDB()" id="db-search" style="max-width:200px">
+          </div>
+        </div>
+        <div id="db-table"></div>
+      </div>
+    </div>
+
+    <!-- POPULAR -->
+    <div id="page-popular" class="page">
+      <div class="page-title">Popular Models</div>
+      <div class="section-card">
+        <div class="section-header">
+          <span class="section-title">Most collected across all users</span>
+          <select class="btn-sm" onchange="loadPopular(this.value)" style="padding:6px 10px">
+            <option value="">All years</option>
+            <option value="2024">2024</option>
+            <option value="2025">2025</option>
+            <option value="2026">2026</option>
+            <option value="2023">2023</option>
+          </select>
+        </div>
+        <div id="popular-table"><div class="loading">Loading...</div></div>
+      </div>
+    </div>
+
+    <!-- LOGS -->
+    <div id="page-logs" class="page">
+      <div class="page-title">Activity Logs</div>
+      <div class="section-card">
+        <div class="section-header">
+          <span class="section-title">Recent Events</span>
+          <div class="section-actions">
+            <select class="btn-sm" onchange="loadLogs(this.value)" style="padding:6px 10px">
+              <option value="">All events</option>
+              <option value="signup">Signups</option>
+              <option value="login">Logins</option>
+              <option value="premium_upgrade">Premium</option>
+              <option value="error">Errors</option>
+            </select>
+            <button class="btn-sm" onclick="loadLogs()">↻ Refresh</button>
+          </div>
+        </div>
+        <div id="logs-list"><div class="loading">Loading logs...</div></div>
+      </div>
+    </div>
+
+    <!-- EXPORT -->
+    <div id="page-export" class="page">
+      <div class="page-title">Export Data</div>
+      <div class="stats-grid">
+        <div class="stat-card" style="cursor:pointer" onclick="exportAllUsers()">
+          <div class="stat-label">Users</div>
+          <div style="font-size:32px;margin:8px 0">👥</div>
+          <div style="font-size:13px;color:var(--text2)">Export all users as CSV</div>
+        </div>
+        <div class="stat-card" style="cursor:pointer" onclick="exportCollections()">
+          <div class="stat-label">Collections</div>
+          <div style="font-size:32px;margin:8px 0">🚗</div>
+          <div style="font-size:13px;color:var(--text2)">Export all collections as CSV</div>
+        </div>
+        <div class="stat-card" style="cursor:pointer" onclick="exportLogs()">
+          <div class="stat-label">Logs</div>
+          <div style="font-size:32px;margin:8px 0">📋</div>
+          <div style="font-size:13px;color:var(--text2)">Export activity logs as CSV</div>
+        </div>
+        <div class="stat-card" style="cursor:pointer" onclick="exportDatabase()">
+          <div class="stat-label">Car Database</div>
+          <div style="font-size:32px;margin:8px 0">🗃️</div>
+          <div style="font-size:13px;color:var(--text2)">Export full car database as CSV</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="js/config.js"></script>
+<script src="js/config.local.js" onerror="console.info('config.local.js not found — SUPABASE_SERVICE_KEY not set')"></script>
+<script src="js/data.js"></script>
+<script src="js/admin.js"></script>
+</body>
+</html>

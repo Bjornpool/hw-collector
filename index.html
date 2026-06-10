@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#E8001C">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="HW Collector">
+<meta name="description" content="Track your Hot Wheels diecast collection. 1400+ models, 2023–2026.">
+<title>HW Collector</title>
+<link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/main.css">
+<link rel="stylesheet" href="css/auth.css">
+</head>
+<body>
+
+<!-- AUTH SCREEN -->
+<div id="auth-screen">
+  <div class="auth-logo">HW<span>.</span>COLLECTOR</div>
+  <div class="auth-tagline">Track your 1:64 diecast collection</div>
+  <div class="auth-card">
+
+    <!-- LOGIN / SIGNUP VIEW -->
+    <div id="auth-login-view">
+      <div class="auth-tabs">
+        <button class="auth-tab active" onclick="switchAuthTab('login')">Sign In</button>
+        <button class="auth-tab" onclick="switchAuthTab('signup')">Sign Up</button>
+      </div>
+      <div id="auth-error" class="auth-error"></div>
+      <input type="email" id="auth-email" class="auth-input" placeholder="Email address" autocomplete="email">
+      <input type="password" id="auth-password" class="auth-input" placeholder="Password" autocomplete="current-password">
+      <div id="auth-name-wrap" style="display:none">
+        <input type="text" id="auth-name" class="auth-input" placeholder="Display name (optional)">
+      </div>
+      <button class="auth-btn" id="auth-submit-btn" onclick="handleAuth()">SIGN IN</button>
+      <a class="auth-forgot-link" onclick="showForgotPassword()">Forgot password?</a>
+      <div class="auth-divider">or</div>
+      <button class="auth-guest" onclick="continueAsGuest()">Continue without account</button>
+    </div>
+
+    <!-- RESET PASSWORD VIEW -->
+    <div id="auth-reset-view" style="display:none">
+      <div class="auth-reset-title">Reset Password</div>
+      <div class="auth-reset-desc">Enter your email and we'll send you a reset link.</div>
+      <div id="auth-reset-error" class="auth-error"></div>
+      <input type="email" id="reset-email" class="auth-input" placeholder="Email address" autocomplete="email">
+      <button class="auth-btn" onclick="sendResetLink()">SEND RESET LINK</button>
+      <a class="auth-forgot-link" onclick="showLoginView()">← Back to login</a>
+    </div>
+
+    <!-- RESET SUCCESS VIEW -->
+    <div id="auth-reset-success" style="display:none">
+      <div class="auth-reset-icon">✉️</div>
+      <div class="auth-reset-title">Check your email</div>
+      <div class="auth-reset-desc">We sent a password reset link to your inbox.</div>
+      <a class="auth-forgot-link" onclick="showLoginView()">← Back to login</a>
+    </div>
+
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="app" style="display:none">
+  <div id="header">
+    <div id="header-top">
+      <div class="app-wordmark">HW<span>.</span>COLLECTOR</div>
+      <button id="user-btn" onclick="openAccount()">👤</button>
+    </div>
+    <div id="progress-wrap">
+      <div id="progress-bar-bg"><div id="progress-fill" style="width:0%"></div></div>
+      <div id="progress-stats">
+        <span><strong id="stat-owned">0</strong> owned</span>
+        <span id="stat-pct" style="color:var(--red);font-weight:700">0%</span>
+        <span><strong id="stat-total">0</strong> models</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="year-bar"></div>
+
+  <div id="controls">
+    <input type="search" id="search" placeholder="Search name, Col# (042), Toy# (HYW18)…" autocomplete="off" autocorrect="off" spellcheck="false">
+    <div class="filter-row">
+      <select id="filter-series"><option value="">All series</option></select>
+      <div class="tabs">
+        <button class="tab active" onclick="setTab('all')">All<span class="tab-count" id="tc-all"></span></button>
+        <button class="tab" onclick="setTab('owned')">Owned<span class="tab-count" id="tc-owned"></span></button>
+        <button class="tab" onclick="setTab('missing')">Missing<span class="tab-count" id="tc-missing"></span></button>
+        <button class="tab" onclick="setTab('new')">New<span class="tab-count" id="tc-new"></span></button>
+        <button class="tab" onclick="setTab('wish')">Wish<span class="tab-count" id="tc-wish"></span></button>
+      </div>
+    </div>
+  </div>
+
+  <div id="list-wrap">
+    <div id="list"></div>
+    <div id="empty">
+      <div id="empty-icon">🔍</div>
+      <div id="empty-text">No results found</div>
+    </div>
+  </div>
+</div>
+
+<!-- DETAIL MODAL -->
+<div id="detail-modal" onclick="if(event.target===this)closeDetail()">
+  <div id="detail-card">
+    <div class="detail-drag"></div>
+    <button id="close-detail" onclick="closeDetail()">✕</button>
+    <div class="detail-photo-wrap" id="detail-photo-wrap" onclick="openCamera()">
+      <img id="detail-photo" alt="Car photo">
+      <div class="detail-no-photo" id="detail-no-photo">
+        <div class="detail-no-photo-icon">📷</div>
+        <div class="detail-no-photo-text">Tap to add photo</div>
+      </div>
+      <button class="detail-photo-del" id="detail-photo-del" onclick="event.stopPropagation();deletePhoto()">✕</button>
+      <button class="detail-photo-change" id="detail-photo-change" onclick="event.stopPropagation();openCamera()">📷 Change</button>
+    </div>
+    <div class="detail-body">
+      <div id="detail-name">—</div>
+      <div id="detail-meta"></div>
+      <div id="detail-rows"></div>
+      <div class="detail-actions">
+        <button class="btn-owned not-owned" id="btn-owned" onclick="toggleOwned()">+ Add to collection</button>
+        <button class="btn-wish" id="btn-wish" onclick="toggleWish()" title="Add to wishlist">🎯</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CAMERA MODAL -->
+<div id="camera-modal">
+  <div class="camera-header">
+    <span class="camera-title" id="camera-car-name">Take Photo</span>
+    <button id="close-camera" onclick="closeCamera()">✕</button>
+  </div>
+  <div class="camera-viewfinder">
+    <video id="camera-video" autoplay muted playsinline></video>
+    <div class="camera-guide">
+      <div class="camera-guide-box">
+        <div class="camera-guide-label">Center the car in the frame</div>
+      </div>
+    </div>
+    <div id="camera-flash"></div>
+  </div>
+  <div class="camera-controls">
+    <div class="cam-side-btn" onclick="openGallery()" style="cursor:pointer">
+      <img id="cam-gallery-img" alt="Last photo">
+      <span id="cam-gallery-icon">🖼️</span>
+      <span class="cam-side-label">Gallery</span>
+      <input type="file" id="gallery-input" accept="image/*" style="display:none" onchange="handleGalleryPhoto(event)">
+    </div>
+    <button id="shutter" onclick="shootPhoto()"><div class="shutter-inner"></div></button>
+    <button class="cam-flip" onclick="flipCamera()">🔄</button>
+  </div>
+</div>
+
+<!-- PREMIUM MODAL -->
+<div id="premium-modal">
+  <div class="premium-card">
+    <div class="premium-icon">⭐</div>
+    <div class="premium-title">GO PREMIUM</div>
+    <div class="premium-desc">Unlock the full HW Collector experience for serious collectors.</div>
+    <div class="premium-features">
+      <div class="premium-feat"><span class="premium-feat-icon">📅</span><span>All years: 2023, 2024, 2025, 2026</span></div>
+      <div class="premium-feat"><span class="premium-feat-icon">☁️</span><span>Sync across all your devices</span></div>
+      <div class="premium-feat"><span class="premium-feat-icon">📸</span><span>Unlimited car photos</span></div>
+      <div class="premium-feat"><span class="premium-feat-icon">🎯</span><span>Wishlist — track what you need</span></div>
+      <div class="premium-feat"><span class="premium-feat-icon">📊</span><span>Collection stats &amp; series progress</span></div>
+    </div>
+    <button class="btn-premium" onclick="upgradePremium()">UNLOCK — $2.99</button>
+    <button class="btn-premium-cancel" onclick="closePremium()">Maybe later</button>
+  </div>
+</div>
+
+<!-- ACCOUNT MODAL -->
+<div id="account-modal" onclick="if(event.target===this)closeAccount()">
+  <div class="account-card">
+    <div class="detail-drag"></div>
+    <div class="account-email" id="account-email-label"></div>
+    <div class="account-row" onclick="openPremium()">
+      <span class="account-row-icon">⭐</span>
+      <span class="account-row-text" id="premium-row-text">Upgrade to Premium</span>
+      <span style="color:var(--text3);font-size:18px">›</span>
+    </div>
+    <div class="account-row" onclick="exportData()">
+      <span class="account-row-icon">📤</span>
+      <span class="account-row-text">Export collection (CSV)</span>
+      <span style="color:var(--text3);font-size:18px">›</span>
+    </div>
+    <div class="account-row" onclick="signOut()">
+      <span class="account-row-icon">🚪</span>
+      <span class="account-row-text danger">Sign out</span>
+    </div>
+  </div>
+</div>
+
+<!-- PASSWORD RECOVERY SCREEN -->
+<div id="reset-screen" style="display:none">
+  <div class="auth-logo">HW<span>.</span>COLLECTOR</div>
+  <div class="auth-tagline">Set your new password</div>
+  <div class="auth-card">
+    <div id="reset-screen-form">
+      <div class="auth-reset-title">New Password</div>
+      <div class="auth-reset-desc">Choose a strong password for your account.</div>
+      <div id="reset-screen-error" class="auth-error"></div>
+      <input type="password" id="new-password" class="auth-input" placeholder="New password (min. 6 characters)" autocomplete="new-password">
+      <input type="password" id="confirm-password" class="auth-input" placeholder="Confirm new password" autocomplete="new-password">
+      <button class="auth-btn" onclick="setNewPassword()">SET NEW PASSWORD</button>
+    </div>
+    <div id="reset-screen-success" style="display:none">
+      <div class="auth-reset-icon">✅</div>
+      <div class="auth-reset-title">Password updated!</div>
+      <div class="auth-reset-desc">You can now sign in with your new password.</div>
+      <button class="auth-btn" onclick="showAuthScreen()">SIGN IN</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/data.js"></script>
+<script src="js/db.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/collection.js"></script>
+<script src="js/premium.js"></script>
+<script src="js/camera.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/render.js"></script>
+</body>
+</html>

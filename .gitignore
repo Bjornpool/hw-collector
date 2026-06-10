@@ -1,0 +1,9 @@
+# Prywatna konfiguracja z kluczami - nigdy nie commituj
+js/config.local.js
+
+# System
+.DS_Store
+Thumbs.db
+
+# Logi
+*.log
