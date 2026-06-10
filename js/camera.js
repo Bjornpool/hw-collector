@@ -9,39 +9,60 @@ async function uploadPhoto(dataUrl, year, carId){
   try {
     const blob = await (await fetch(dataUrl)).blob();
     const path = `${userId}/${year}/${carId}.jpg`;
+    const url = `${SUPABASE_URL}/storage/v1/object/car-photos/${path}`;
     const formData = new FormData();
     formData.append('file', blob, 'photo.jpg');
 
-    let res = await fetch(`${SUPABASE_URL}/storage/v1/object/car-photos/${path}`, {
+    let res = await fetch(url, {
       method: 'POST',
       headers: { 'Authorization': 'Bearer ' + currentToken, 'apikey': SUPABASE_KEY },
       body: formData
     });
 
-    // 409 = already exists — upsert
+    console.log('[upload] status:', res.status);
+    const respText = await res.text();
+    console.log('[upload] response:', respText);
+
+    // 409 = already exists — upsert via PUT
     if(res.status === 409){
-      res = await fetch(`${SUPABASE_URL}/storage/v1/object/car-photos/${path}`, {
+      const putRes = await fetch(url, {
         method: 'PUT',
-        headers: { 'Authorization': 'Bearer ' + currentToken, 'apikey': SUPABASE_KEY, 'x-upsert': 'true' },
+        headers: { 'Authorization': 'Bearer ' + currentToken, 'apikey': SUPABASE_KEY },
         body: formData
       });
+      console.log('[upload] PUT status:', putRes.status);
+      if(putRes.ok){
+        localStorage.setItem(`hwc_photo_exists_${userId}_${year}_${carId}`, '1');
+        localStorage.removeItem(`hwc_photo_${userId}_${year}_${carId}`);
+        return true;
+      }
     }
 
     if(res.ok){
-      // Mark photo as existing — don't cache URL, blob URLs are session-only
       localStorage.setItem(`hwc_photo_exists_${userId}_${year}_${carId}`, '1');
+      localStorage.removeItem(`hwc_photo_${userId}_${year}_${carId}`);
       return true;
     }
-    console.warn('[uploadPhoto] failed:', res.status, await res.text());
-    return false;
-  } catch(e){ console.warn('[uploadPhoto] error:', e); return false; }
+
+    // Upload failed — save to localStorage as fallback so photo is not lost
+    console.warn('[upload] falling back to localStorage');
+    localStorage.setItem(`hwc_photo_${userId}_${year}_${carId}`, dataUrl);
+    return true;
+  } catch(e){
+    console.warn('[uploadPhoto] error:', e);
+    // Network error — save to localStorage so photo is not lost
+    localStorage.setItem(`hwc_photo_${userId}_${year}_${carId}`, dataUrl);
+    return true;
+  }
 }
 
 async function getPhotoUrl(year, carId){
-  // Guest fallback — data URL stored directly in localStorage
-  if(isGuest || !userId || !currentToken){
-    return localStorage.getItem(`hwc_photo_${userId}_${year}_${carId}`) || null;
-  }
+  // Check localStorage first — may be base64 fallback from failed upload
+  const cached = localStorage.getItem(`hwc_photo_${userId}_${year}_${carId}`);
+  if(cached) return cached;
+
+  // Guest fallback — no Supabase Storage
+  if(isGuest || !userId || !currentToken) return null;
 
   const path = `${userId}/${year}/${carId}.jpg`;
   const url = `${SUPABASE_URL}/storage/v1/object/authenticated/car-photos/${path}`;
