@@ -55,6 +55,11 @@ function signOut(){
   document.getElementById('auth-screen').style.display='flex';
   userId=null; userEmail=''; isGuest=false; currentToken=null;
   YEARS.forEach(y=>{owned[y]=new Set(); wished[y]=new Set();});
+  switchAuthTab('login');
+  setTimeout(() => {
+    document.getElementById('auth-email').value = '';
+    document.getElementById('auth-password').value = '';
+  }, 100);
 }
 
 // ===================== EXPORT =====================

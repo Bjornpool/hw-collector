@@ -279,10 +279,37 @@ async function grantPremiumByEmail(){
 }
 
 async function deleteUser(userId, email){
+  console.log('[deleteUser] userId:', userId, 'email:', email);
   if(!confirm(`Delete user ${email}?\nThis will remove all their data permanently.`)) return;
-  await sbFetch(`profiles?id=eq.${userId}`, adminToken, 'DELETE');
-  toast('User deleted');
-  loadUsers();
+
+  if(!SUPABASE_SERVICE_KEY){
+    toast('⚠️ Ustaw SUPABASE_SERVICE_KEY w js/config.local.js');
+    return;
+  }
+
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
+      method: 'DELETE',
+      headers: {
+        'apikey': SUPABASE_SERVICE_KEY,
+        'Authorization': 'Bearer ' + SUPABASE_SERVICE_KEY
+      }
+    });
+    console.log('[deleteUser] Auth API response:', res.status);
+
+    if(!res.ok){
+      const err = await res.json().catch(() => ({ message: res.statusText }));
+      console.error('[deleteUser] failed:', err);
+      toast('Error: ' + (err.message || err.error_description || res.statusText));
+      return;
+    }
+
+    toast('User deleted successfully');
+    loadUsers();
+  } catch(e){
+    console.error('[deleteUser] exception:', e);
+    toast('Error: ' + e.message);
+  }
 }
 
 async function resetUserPassword(userId, email){

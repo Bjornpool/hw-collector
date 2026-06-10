@@ -25,14 +25,14 @@
   <div class="auth-card">
 
     <!-- LOGIN / SIGNUP VIEW -->
-    <div id="auth-login-view">
+    <div id="auth-login-view" autocomplete="off">
       <div class="auth-tabs">
         <button class="auth-tab active" onclick="switchAuthTab('login')">Sign In</button>
         <button class="auth-tab" onclick="switchAuthTab('signup')">Sign Up</button>
       </div>
       <div id="auth-error" class="auth-error"></div>
-      <input type="email" id="auth-email" class="auth-input" placeholder="Email address" autocomplete="email">
-      <input type="password" id="auth-password" class="auth-input" placeholder="Password" autocomplete="current-password">
+      <input type="email" id="auth-email" class="auth-input" placeholder="Email address" autocomplete="off">
+      <input type="password" id="auth-password" class="auth-input" placeholder="Password" autocomplete="new-password">
       <div id="auth-name-wrap" style="display:none">
         <input type="text" id="auth-name" class="auth-input" placeholder="Display name (optional)">
       </div>
