@@ -238,5 +238,23 @@ if('serviceWorker' in navigator){
 <script src="js/camera.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/render.js"></script>
+<script>
+history.pushState(null, '', window.location.pathname);
+window.addEventListener('popstate', function(e) {
+  if(document.getElementById('detail-modal').classList.contains('open')){
+    closeDetail(); return;
+  }
+  if(document.getElementById('camera-modal').classList.contains('open')){
+    closeCamera(); return;
+  }
+  if(document.getElementById('premium-modal').classList.contains('open')){
+    closePremium(); return;
+  }
+  if(document.getElementById('account-modal').classList.contains('open')){
+    closeAccount(); return;
+  }
+  history.pushState(null, '', window.location.pathname);
+});
+</script>
 </body>
 </html>

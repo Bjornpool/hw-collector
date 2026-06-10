@@ -104,13 +104,14 @@ function render(){
       const isWished = wset.has(car.id);
       const tags = getTags(car);
       const tagHtml = tags.map(t=>`<span class="tag ${t.cls}">${t.label}</span>`).join('');
-      const hasPhoto = !!localStorage.getItem(`hwc_photo_${userId}_${currentYear}_${car.id}`);
+      const photoData = localStorage.getItem(`hwc_photo_${userId}_${currentYear}_${car.id}`);
+      const hasPhoto = !!localStorage.getItem(`hwc_photo_exists_${userId}_${currentYear}_${car.id}`) || !!photoData;
       const note = car.note ? `<span class="car-name-note"> · ${car.note}</span>` : '';
       return `<div class="car-item${isOwned?' owned':''}${isWished&&!isOwned?' wished':''}" onclick="openDetail(${car.id})">
         <div class="car-col">${String(car.col).padStart(3,'0')}</div>
         <div class="car-thumb">
           ${hasPhoto
-            ? `<img src="${localStorage.getItem(`hwc_photo_${userId}_${currentYear}_${car.id}`)}" alt="">`
+            ? (photoData ? `<img src="${photoData}" alt="">` : `<span class="car-thumb-icon">📷</span>`)
             : `<span class="car-thumb-icon">${isOwned?'✓':'🚗'}</span>`
           }
         </div>
