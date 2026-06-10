@@ -1,4 +1,4 @@
-const CACHE_NAME = 'hwcollector-' + '2026061001';
+const CACHE_NAME = 'hwcollector-' + '2026061002';
 const ASSETS = [
   '/',
   '/index.html',
