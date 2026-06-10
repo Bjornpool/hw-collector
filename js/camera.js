@@ -1,45 +1,122 @@
-// ===================== PHOTOS =====================
-function photoKey(car){ return `hwc_photo_${userId}_${currentYear}_${car.id}`; }
+// ===================== PHOTO STORAGE =====================
 
-function loadPhoto(car){
-  const data = localStorage.getItem(photoKey(car));
+async function uploadPhoto(dataUrl, year, carId){
+  if(isGuest || !userId || !currentToken){
+    // Guest fallback — localStorage only
+    try { localStorage.setItem(`hwc_photo_${userId}_${year}_${carId}`, dataUrl); return true; }
+    catch(e){ return false; }
+  }
+  try {
+    const blob = await (await fetch(dataUrl)).blob();
+    const path = `${userId}/${year}/${carId}.jpg`;
+    const formData = new FormData();
+    formData.append('file', blob, 'photo.jpg');
+
+    let res = await fetch(`${SUPABASE_URL}/storage/v1/object/car-photos/${path}`, {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + currentToken, 'apikey': SUPABASE_KEY },
+      body: formData
+    });
+
+    // 409 = already exists — upsert
+    if(res.status === 409){
+      res = await fetch(`${SUPABASE_URL}/storage/v1/object/car-photos/${path}`, {
+        method: 'PUT',
+        headers: { 'Authorization': 'Bearer ' + currentToken, 'apikey': SUPABASE_KEY, 'x-upsert': 'true' },
+        body: formData
+      });
+    }
+
+    if(res.ok){
+      localStorage.setItem(`hwc_photo_${userId}_${year}_${carId}`,
+        `${SUPABASE_URL}/storage/v1/object/authenticated/car-photos/${path}`);
+      return true;
+    }
+    console.warn('[uploadPhoto] failed:', res.status, await res.text());
+    return false;
+  } catch(e){ console.warn('[uploadPhoto] error:', e); return false; }
+}
+
+async function getPhotoUrl(year, carId){
+  const key = `hwc_photo_${userId}_${year}_${carId}`;
+  const cached = localStorage.getItem(key);
+  if(cached) return cached;
+
+  if(isGuest || !userId || !currentToken) return null;
+
+  const path = `${userId}/${year}/${carId}.jpg`;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/car-photos/${path}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + currentToken,
+        'apikey': SUPABASE_KEY,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ expiresIn: 3600 })
+    });
+    if(!res.ok) return null;
+    const data = await res.json();
+    if(data.signedURL){
+      const url = SUPABASE_URL + data.signedURL;
+      localStorage.setItem(key, url);
+      return url;
+    }
+    return null;
+  } catch(e){ console.warn('[getPhotoUrl] error:', e); return null; }
+}
+
+async function deletePhotoFromStorage(year, carId){
+  const key = `hwc_photo_${userId}_${year}_${carId}`;
+  localStorage.removeItem(key);
+  if(isGuest || !userId || !currentToken) return;
+  const path = `${userId}/${year}/${carId}.jpg`;
+  try {
+    await fetch(`${SUPABASE_URL}/storage/v1/object/car-photos/${path}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': 'Bearer ' + currentToken, 'apikey': SUPABASE_KEY }
+    });
+  } catch(e){ console.warn('[deletePhotoFromStorage] error:', e); }
+}
+
+// ===================== PHOTOS — UI =====================
+
+async function loadPhoto(car){
+  const url = await getPhotoUrl(currentYear, car.id);
   const img = document.getElementById('detail-photo');
   const noPhoto = document.getElementById('detail-no-photo');
   const delBtn = document.getElementById('detail-photo-del');
   const changeBtn = document.getElementById('detail-photo-change');
-  if(data){
-    img.src = data; img.style.display = 'block';
+  if(url){
+    img.src = url; img.style.display = 'block';
     noPhoto.style.display = 'none';
     delBtn.style.display = 'flex'; changeBtn.style.display = 'block';
     const gt = document.getElementById('cam-gallery-img');
-    if(gt){ gt.src=data; gt.style.display='block'; document.getElementById('cam-gallery-icon').style.display='none'; }
+    if(gt){ gt.src = url; gt.style.display = 'block'; document.getElementById('cam-gallery-icon').style.display = 'none'; }
   } else {
     img.style.display = 'none'; noPhoto.style.display = 'flex';
     delBtn.style.display = 'none'; changeBtn.style.display = 'none';
   }
 }
 
-function deletePhoto(){
-  if(!currentCar||!confirm('Delete photo?')) return;
-  localStorage.removeItem(photoKey(currentCar));
+async function deletePhoto(){
+  if(!currentCar || !confirm('Delete photo?')) return;
+  await deletePhotoFromStorage(currentYear, currentCar.id);
   loadPhoto(currentCar); render();
 }
 
 // ===================== CAMERA =====================
-function openCamera(){
+
+async function openCamera(){
   if(!currentCar) return;
-  if(!isPremium && isGuest){
-    // guests can still take photos locally — no restriction
-  }
   const modal = document.getElementById('camera-modal');
   modal.classList.add('open');
   document.getElementById('camera-car-name').textContent = currentCar.name;
-  // Load existing thumb
-  const existing = localStorage.getItem(photoKey(currentCar));
   const gi = document.getElementById('cam-gallery-img');
   const gicon = document.getElementById('cam-gallery-icon');
-  if(existing){ gi.src=existing; gi.style.display='block'; gicon.style.display='none'; }
-  else { gi.style.display='none'; gicon.style.display='block'; }
+  const existing = await getPhotoUrl(currentYear, currentCar.id);
+  if(existing){ gi.src = existing; gi.style.display = 'block'; gicon.style.display = 'none'; }
+  else { gi.style.display = 'none'; gicon.style.display = 'block'; }
   startCamera();
 }
 
@@ -104,12 +181,11 @@ function handleGalleryPhoto(e){
   e.target.value='';
 }
 
-function savePhoto(dataUrl){
+async function savePhoto(dataUrl){
   if(!currentCar) return;
-  try {
-    localStorage.setItem(photoKey(currentCar), dataUrl);
-    loadPhoto(currentCar); render(); closeCamera();
-  } catch(e){ alert('Not enough storage. Delete some photos first.'); }
+  const ok = await uploadPhoto(dataUrl, currentYear, currentCar.id);
+  if(ok){ loadPhoto(currentCar); render(); closeCamera(); }
+  else { alert('Failed to save photo. Please try again.'); }
 }
 
 function closeCamera(){
