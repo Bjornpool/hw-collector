@@ -5,6 +5,10 @@ let adminToken = null;
 let adminId = null;
 let allUsersCache = [];
 
+function getServiceKey(){
+  return sessionStorage.getItem('adm_service_key') || '';
+}
+
 // ===== AUTH =====
 async function adminLogin(){
   const email = document.getElementById('adm-email').value.trim();
@@ -45,6 +49,8 @@ async function adminLogin(){
 
     adminToken = token;
     adminId = data.user.id;
+    const serviceKey = document.getElementById('adm-service-key').value.trim();
+    if(serviceKey) sessionStorage.setItem('adm_service_key', serviceKey);
     document.getElementById('adm-user-label').textContent = email;
     document.getElementById('auth-wrap').style.display = 'none';
     document.getElementById('app').style.display = 'block';
@@ -56,6 +62,8 @@ async function adminLogin(){
 
 function adminSignOut(){
   adminToken = null; adminId = null;
+  sessionStorage.removeItem('adm_service_key');
+  document.getElementById('adm-service-key').value = '';
   document.getElementById('app').style.display = 'none';
   document.getElementById('auth-wrap').style.display = 'flex';
 }
@@ -244,9 +252,9 @@ function renderUsersTable(users){
               ? `<button class="btn-sm danger" onclick="setPremium('${u.id}',false)">Revoke</button>`
               : `<button class="btn-sm success" onclick="setPremium('${u.id}',true)">Grant ⭐</button>`
             }
-            ${SUPABASE_SERVICE_KEY
+            ${getServiceKey()
               ? `<button class="btn-sm" onclick="resetUserPassword('${u.id}','${(u.email||'').replace(/'/g,"\\'")}')">Reset PWD</button>`
-              : `<button class="btn-sm" disabled title="Service key not configured — ustaw w js/config.local.js">Reset PWD</button>`
+              : `<button class="btn-sm" disabled title="Service key not provided at login">Reset PWD</button>`
             }
             <button class="btn-sm danger" onclick="deleteUser('${u.id}','${u.email}')">Delete</button>
           </td>
@@ -280,19 +288,16 @@ async function grantPremiumByEmail(){
 
 async function deleteUser(userId, email){
   console.log('[deleteUser] userId:', userId, 'email:', email);
+  const svcKey = getServiceKey();
+  if(!svcKey){ toast('⚠️ Podaj Service Role Key przy logowaniu'); return; }
   if(!confirm(`Delete user ${email}?\nThis will remove all their data permanently.`)) return;
-
-  if(!SUPABASE_SERVICE_KEY){
-    toast('⚠️ Ustaw SUPABASE_SERVICE_KEY w js/config.local.js');
-    return;
-  }
 
   try {
     const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
       method: 'DELETE',
       headers: {
-        'apikey': SUPABASE_SERVICE_KEY,
-        'Authorization': 'Bearer ' + SUPABASE_SERVICE_KEY
+        'apikey': svcKey,
+        'Authorization': 'Bearer ' + svcKey
       }
     });
     console.log('[deleteUser] Auth API response:', res.status);
@@ -313,17 +318,15 @@ async function deleteUser(userId, email){
 }
 
 async function resetUserPassword(userId, email){
-  if(!SUPABASE_SERVICE_KEY){
-    toast('⚠️ Ustaw SUPABASE_SERVICE_KEY w js/config.js');
-    return;
-  }
+  const svcKey = getServiceKey();
+  if(!svcKey){ toast('⚠️ Podaj Service Role Key przy logowaniu'); return; }
   if(!confirm(`Reset hasła dla ${email||userId}?\nNowe hasło tymczasowe: TempPassword123!`)) return;
   try {
     const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
       method: 'PUT',
       headers: {
-        'apikey': SUPABASE_SERVICE_KEY,
-        'Authorization': 'Bearer ' + SUPABASE_SERVICE_KEY,
+        'apikey': svcKey,
+        'Authorization': 'Bearer ' + svcKey,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({ password: 'TempPassword123!' })
