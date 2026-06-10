@@ -5,9 +5,6 @@ let adminToken = null;
 let adminId = null;
 let allUsersCache = [];
 
-function getServiceKey(){
-  return sessionStorage.getItem('adm_service_key') || '';
-}
 
 // ===== AUTH =====
 async function adminLogin(){
@@ -49,8 +46,6 @@ async function adminLogin(){
 
     adminToken = token;
     adminId = data.user.id;
-    const serviceKey = document.getElementById('adm-service-key').value.trim();
-    if(serviceKey) sessionStorage.setItem('adm_service_key', serviceKey);
     document.getElementById('adm-user-label').textContent = email;
     document.getElementById('auth-wrap').style.display = 'none';
     document.getElementById('app').style.display = 'block';
@@ -62,8 +57,6 @@ async function adminLogin(){
 
 function adminSignOut(){
   adminToken = null; adminId = null;
-  sessionStorage.removeItem('adm_service_key');
-  document.getElementById('adm-service-key').value = '';
   document.getElementById('app').style.display = 'none';
   document.getElementById('auth-wrap').style.display = 'flex';
 }
@@ -252,10 +245,7 @@ function renderUsersTable(users){
               ? `<button class="btn-sm danger" onclick="setPremium('${u.id}',false)">Revoke</button>`
               : `<button class="btn-sm success" onclick="setPremium('${u.id}',true)">Grant ⭐</button>`
             }
-            ${getServiceKey()
-              ? `<button class="btn-sm" onclick="resetUserPassword('${u.id}','${(u.email||'').replace(/'/g,"\\'")}')">Reset PWD</button>`
-              : `<button class="btn-sm" disabled title="Service key not provided at login">Reset PWD</button>`
-            }
+            <button class="btn-sm" onclick="resetUserPassword('${u.id}','${(u.email||'').replace(/'/g,"\\'")}')">Reset PWD</button>
             <button class="btn-sm danger" onclick="deleteUser('${u.id}','${u.email}')">Delete</button>
           </td>
         </tr>`).join('')}
@@ -287,60 +277,42 @@ async function grantPremiumByEmail(){
 }
 
 async function deleteUser(userId, email){
-  console.log('[deleteUser] userId:', userId, 'email:', email);
-  const svcKey = getServiceKey();
-  if(!svcKey){ toast('⚠️ Podaj Service Role Key przy logowaniu'); return; }
   if(!confirm(`Delete user ${email}?\nThis will remove all their data permanently.`)) return;
 
+  const tables = [
+    `profiles?id=eq.${userId}`,
+    `collection?user_id=eq.${userId}`,
+    `wishlist?user_id=eq.${userId}`,
+    `app_logs?user_id=eq.${userId}`
+  ];
+
   try {
-    const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
-      method: 'DELETE',
-      headers: {
-        'apikey': svcKey,
-        'Authorization': 'Bearer ' + svcKey
-      }
-    });
-    console.log('[deleteUser] Auth API response:', res.status);
-
-    if(!res.ok){
-      const err = await res.json().catch(() => ({ message: res.statusText }));
-      console.error('[deleteUser] failed:', err);
-      toast('Error: ' + (err.message || err.error_description || res.statusText));
-      return;
-    }
-
-    toast('User deleted successfully');
+    await Promise.all(tables.map(t => sbFetch(t, adminToken, 'DELETE')));
+    toast('User data deleted. Auth account requires manual removal in Supabase.');
     loadUsers();
   } catch(e){
     console.error('[deleteUser] exception:', e);
-    toast('Error: ' + e.message);
+    toast('Error deleting user data: ' + e.message);
   }
 }
 
 async function resetUserPassword(userId, email){
-  const svcKey = getServiceKey();
-  if(!svcKey){ toast('⚠️ Podaj Service Role Key przy logowaniu'); return; }
-  if(!confirm(`Reset hasła dla ${email||userId}?\nNowe hasło tymczasowe: TempPassword123!`)) return;
+  if(!email){ toast('No email address for this user'); return; }
+  if(!confirm(`Send password reset email to ${email}?`)) return;
   try {
-    const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
-      method: 'PUT',
-      headers: {
-        'apikey': svcKey,
-        'Authorization': 'Bearer ' + svcKey,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ password: 'TempPassword123!' })
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/recover`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY },
+      body: JSON.stringify({ email, redirectTo: 'https://hw-collector.vercel.app' })
     });
-    if(!res.ok){
-      const err = await res.text();
-      console.warn('[resetUserPassword] error:', res.status, err);
-      toast('Błąd resetu hasła — sprawdź konsolę');
-      return;
+    if(res.ok){
+      toast(`Password reset email sent to ${email}`);
+    } else {
+      const err = await res.json().catch(() => ({}));
+      toast('Error: ' + (err.error_description || err.msg || res.statusText));
     }
-    toast('Password reset to: TempPassword123!');
   } catch(e){
-    console.warn('[resetUserPassword] exception:', e);
-    toast('Błąd połączenia przy resecie hasła');
+    toast('Connection error: ' + e.message);
   }
 }
 

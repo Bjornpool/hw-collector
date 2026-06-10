@@ -17,13 +17,6 @@
     <div id="auth-err" class="auth-err"></div>
     <input type="email" id="adm-email" class="inp" placeholder="Admin email" autocomplete="email">
     <input type="password" id="adm-pass" class="inp" placeholder="Password">
-    <div style="border-top:1px solid #333;margin:16px 0 12px;padding-top:14px">
-      <div style="font-size:11px;color:#888;margin-bottom:8px;letter-spacing:0.3px">
-        SERVICE ROLE KEY <span style="color:#555">— required for Reset PWD &amp; Delete</span>
-      </div>
-      <input type="password" id="adm-service-key" class="inp" placeholder="eyJhbGciOi… (from Supabase → Settings → API)" autocomplete="off" style="margin-bottom:4px">
-      <div style="font-size:10px;color:#555">Stored in sessionStorage only — cleared on sign out</div>
-    </div>
     <button class="btn-primary" onclick="adminLogin()">SIGN IN</button>
   </div>
 </div>
