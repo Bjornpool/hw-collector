@@ -28,8 +28,8 @@ async function uploadPhoto(dataUrl, year, carId){
     }
 
     if(res.ok){
-      localStorage.setItem(`hwc_photo_${userId}_${year}_${carId}`,
-        `${SUPABASE_URL}/storage/v1/object/authenticated/car-photos/${path}`);
+      // Mark photo as existing — don't cache URL, blob URLs are session-only
+      localStorage.setItem(`hwc_photo_exists_${userId}_${year}_${carId}`, '1');
       return true;
     }
     console.warn('[uploadPhoto] failed:', res.status, await res.text());
@@ -38,37 +38,26 @@ async function uploadPhoto(dataUrl, year, carId){
 }
 
 async function getPhotoUrl(year, carId){
-  const key = `hwc_photo_${userId}_${year}_${carId}`;
-  const cached = localStorage.getItem(key);
-  if(cached) return cached;
-
-  if(isGuest || !userId || !currentToken) return null;
+  // Guest fallback — data URL stored directly in localStorage
+  if(isGuest || !userId || !currentToken){
+    return localStorage.getItem(`hwc_photo_${userId}_${year}_${carId}`) || null;
+  }
 
   const path = `${userId}/${year}/${carId}.jpg`;
+  const url = `${SUPABASE_URL}/storage/v1/object/authenticated/car-photos/${path}`;
   try {
-    const res = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/car-photos/${path}`, {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + currentToken,
-        'apikey': SUPABASE_KEY,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ expiresIn: 3600 })
+    const res = await fetch(url, {
+      headers: { 'Authorization': 'Bearer ' + currentToken, 'apikey': SUPABASE_KEY }
     });
     if(!res.ok) return null;
-    const data = await res.json();
-    if(data.signedURL){
-      const url = SUPABASE_URL + data.signedURL;
-      localStorage.setItem(key, url);
-      return url;
-    }
-    return null;
+    const blob = await res.blob();
+    return URL.createObjectURL(blob);
   } catch(e){ console.warn('[getPhotoUrl] error:', e); return null; }
 }
 
 async function deletePhotoFromStorage(year, carId){
-  const key = `hwc_photo_${userId}_${year}_${carId}`;
-  localStorage.removeItem(key);
+  localStorage.removeItem(`hwc_photo_${userId}_${year}_${carId}`);
+  localStorage.removeItem(`hwc_photo_exists_${userId}_${year}_${carId}`);
   if(isGuest || !userId || !currentToken) return;
   const path = `${userId}/${year}/${carId}.jpg`;
   try {
