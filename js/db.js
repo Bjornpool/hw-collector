@@ -74,11 +74,13 @@ async function logEvent(type, data={}){
 
 async function loadFromSupabase(){
   if(isGuest || !userId || !currentToken) return;
+  console.log('[loadFromSupabase] starting...');
   try {
     const [col, wish] = await Promise.all([
       supabaseFetch(`collection?user_id=eq.${userId}&select=year,car_id`),
       supabaseFetch(`wishlist?user_id=eq.${userId}&select=year,car_id`)
     ]);
+    console.log('[loadFromSupabase] loaded:', col?.length, 'owned,', wish?.length, 'wished');
     // Reset and load
     YEARS.forEach(y => { owned[y] = new Set(); wished[y] = new Set(); });
     (col||[]).forEach(r => { if(owned[r.year]) owned[r.year].add(r.car_id); });
