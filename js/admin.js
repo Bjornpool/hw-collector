@@ -57,8 +57,21 @@ async function adminLogin(){
 
 function adminSignOut(){
   adminToken = null; adminId = null;
+
+  const emailEl = document.getElementById('adm-email');
+  const passEl  = document.getElementById('adm-pass');
+  emailEl.setAttribute('readonly', true);
+  passEl.setAttribute('readonly', true);
+  emailEl.value = '';
+  passEl.value  = '';
+
   document.getElementById('app').style.display = 'none';
   document.getElementById('auth-wrap').style.display = 'flex';
+
+  setTimeout(() => {
+    emailEl.removeAttribute('readonly');
+    passEl.removeAttribute('readonly');
+  }, 500);
 }
 
 // ===== SUPABASE =====
