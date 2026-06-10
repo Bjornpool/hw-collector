@@ -54,8 +54,6 @@ function signOut(){
 
   const emailEl = document.getElementById('auth-email');
   const passEl  = document.getElementById('auth-password');
-  console.log('[signOut] emailEl:', emailEl, '| passEl:', passEl);
-
   // Block autofill before auth-screen becomes visible
   emailEl.setAttribute('readonly', true);
   passEl.setAttribute('readonly', true);
