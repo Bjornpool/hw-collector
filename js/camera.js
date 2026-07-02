@@ -211,7 +211,7 @@ function shootPhoto(){
     const cropW = boxRect.width * scaleX;
     const cropH = boxRect.height * scaleY;
 
-    const UPSCALE = 2.5;
+    const UPSCALE = 4;
     const canvas = document.createElement('canvas');
     canvas.width = Math.round(cropW * UPSCALE);
     canvas.height = Math.round(cropH * UPSCALE);

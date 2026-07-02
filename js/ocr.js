@@ -42,34 +42,65 @@ function getOcrWorker(){
   return ocrWorkerPromise;
 }
 
-// Grayscale -> contrast-stretch (min/max normalize) -> hard threshold to
-// black/white, in place. Card print photographed off-angle under phone
-// flash is low-contrast and noisy; Tesseract reads clean B/W dramatically
-// better than the raw color crop.
+// Grayscale -> light denoise blur -> adaptive threshold (each pixel vs.
+// its own local background estimate) -> black/white, in place.
+//
+// A single global threshold blows out one side of the crop and crushes
+// the other whenever lighting is uneven across the card (phone flash,
+// shadow, off-angle shot) — exactly the "letters read as garbage
+// fragments" failure mode. Comparing each pixel to a heavily-blurred
+// version of itself (the local background) instead of one fixed number
+// adapts to that unevenness. The light 1px blur before that just knocks
+// down sensor/JPEG noise so thin letter strokes don't fragment into
+// speckles that the threshold then treats as separate blobs.
 function preprocessCanvasForOcr(canvas){
+  const w = canvas.width, h = canvas.height;
   const ctx = canvas.getContext('2d');
-  const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const d = img.data;
-  const pixelCount = d.length / 4;
 
-  const gray = new Uint8ClampedArray(pixelCount);
-  let min = 255, max = 0;
-  for(let i = 0, p = 0; p < pixelCount; i += 4, p++){
-    const g = d[i] * 0.299 + d[i+1] * 0.587 + d[i+2] * 0.114;
-    gray[p] = g;
-    if(g < min) min = g;
-    if(g > max) max = g;
+  // 1. Grayscale, onto its own canvas so the blur passes below have a
+  // clean single-channel source to work from.
+  const grayCanvas = document.createElement('canvas');
+  grayCanvas.width = w; grayCanvas.height = h;
+  const grayCtx = grayCanvas.getContext('2d');
+  grayCtx.drawImage(canvas, 0, 0);
+  const grayImg = grayCtx.getImageData(0, 0, w, h);
+  {
+    const d = grayImg.data;
+    for(let i = 0; i < d.length; i += 4){
+      const g = d[i] * 0.299 + d[i+1] * 0.587 + d[i+2] * 0.114;
+      d[i] = d[i+1] = d[i+2] = g;
+    }
+    grayCtx.putImageData(grayImg, 0, 0);
   }
 
-  const range = Math.max(1, max - min);
-  const THRESHOLD = 128;
-  for(let i = 0, p = 0; p < pixelCount; i += 4, p++){
-    const stretched = (gray[p] - min) / range * 255;
-    const bw = stretched > THRESHOLD ? 255 : 0;
-    d[i] = d[i+1] = d[i+2] = bw;
-  }
+  // 2. Denoise: a 1px blur to suppress noise before we start comparing
+  // pixel values against each other.
+  const fgCanvas = document.createElement('canvas');
+  fgCanvas.width = w; fgCanvas.height = h;
+  const fgCtx = fgCanvas.getContext('2d');
+  fgCtx.filter = 'blur(1px)';
+  fgCtx.drawImage(grayCanvas, 0, 0);
+  const fg = fgCtx.getImageData(0, 0, w, h);
 
-  ctx.putImageData(img, 0, 0);
+  // 3. Local background estimate: a much heavier blur, so it tracks slow
+  // lighting gradients but not individual letters.
+  const bgCanvas = document.createElement('canvas');
+  bgCanvas.width = w; bgCanvas.height = h;
+  const bgCtx = bgCanvas.getContext('2d');
+  bgCtx.filter = 'blur(18px)';
+  bgCtx.drawImage(grayCanvas, 0, 0);
+  const bg = bgCtx.getImageData(0, 0, w, h);
+
+  // 4. Threshold each pixel against its own local background: darker than
+  // the local background by more than C counts as ink (black).
+  const C = 12;
+  const out = ctx.getImageData(0, 0, w, h);
+  for(let i = 0; i < out.data.length; i += 4){
+    const isInk = fg.data[i] < bg.data[i] - C;
+    const v = isInk ? 0 : 255;
+    out.data[i] = out.data[i+1] = out.data[i+2] = v;
+  }
+  ctx.putImageData(out, 0, 0);
   return canvas;
 }
 
