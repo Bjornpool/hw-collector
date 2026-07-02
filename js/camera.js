@@ -120,15 +120,19 @@ async function deletePhoto(){
 // Swaps which viewfinder guide box is shown: the 4:3 car-framing box for
 // photo mode, or the short/wide text-strip box (bottom of the card, where
 // Col#/name print) for scan mode. Different regions, different purpose.
+// Purely visual — null-safe on both lookups so a missing/renamed element
+// (e.g. a stale cached index.html momentarily out of sync with a fresh
+// camera.js) can never throw and take the actual camera stream down with it.
 function setGuideMode(mode){
-  document.getElementById('photo-guide').style.display = mode === 'photo' ? '' : 'none';
-  document.getElementById('scan-guide').style.display = mode === 'scan' ? '' : 'none';
+  const photoGuide = document.getElementById('photo-guide');
+  const scanGuide = document.getElementById('scan-guide');
+  if(photoGuide) photoGuide.style.display = mode === 'photo' ? '' : 'none';
+  if(scanGuide) scanGuide.style.display = mode === 'scan' ? '' : 'none';
 }
 
 async function openCamera(){
   if(!currentCar) return;
   cameraMode = 'photo';
-  setGuideMode('photo');
   const modal = document.getElementById('camera-modal');
   modal.classList.add('open');
   const galleryBtn = document.getElementById('cam-gallery-btn');
@@ -140,6 +144,7 @@ async function openCamera(){
   if(existing){ gi.src = existing; gi.style.display = 'block'; gicon.style.display = 'none'; }
   else { gi.style.display = 'none'; gicon.style.display = 'block'; }
   startCamera();
+  setGuideMode('photo'); // after starting the stream: a guide-box hiccup must never block the camera itself
 }
 
 // Card scan (OCR) — deliberately does NOT touch currentCar, so a stale
@@ -147,7 +152,6 @@ async function openCamera(){
 // against it if a scan is interrupted mid-flow.
 function openScanCamera(){
   cameraMode = 'scan';
-  setGuideMode('scan');
   currentCar = null;
   const modal = document.getElementById('camera-modal');
   modal.classList.add('open');
@@ -155,6 +159,7 @@ function openScanCamera(){
   if(galleryBtn) galleryBtn.style.display = 'none';
   document.getElementById('camera-car-name').textContent = 'Scan Card';
   startCamera();
+  setGuideMode('scan'); // after starting the stream, same reasoning as openCamera()
 }
 
 function startCamera(){
