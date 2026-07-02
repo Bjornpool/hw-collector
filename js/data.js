@@ -1486,3 +1486,10 @@ HWDATA[2026] = [
 ];
 
 window.HWDATA = HWDATA;
+
+// ===================== MERGED CROSS-YEAR VIEW =====================
+// Flat view over HWDATA for global search. Does NOT replace HWDATA or
+// change any `id` — those stay local to each year and are what the
+// localStorage collection keys (hwc_owned_<uid>_<year>) are built from.
+const ALL_CARS = YEARS.flatMap(y => (HWDATA[y] || []).map(c => ({...c, year: y})));
+window.ALL_CARS = ALL_CARS;

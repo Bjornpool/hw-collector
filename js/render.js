@@ -57,23 +57,82 @@ function getFiltered(){
   if(tab==='new') list = list.filter(c=>(c.tags||'').toLowerCase().includes('new'));
   if(tab==='wish') list = list.filter(c=>wset.has(c.id));
   if(seriesFilter) list = list.filter(c=>c.series===seriesFilter);
-  if(query){
-    const q = query.toLowerCase().trim();
-    const qn = parseInt(q,10);
-    list = list.filter(c=>{
-      if(!isNaN(qn) && c.col===qn) return true;
-      if(c.toy && c.toy.toLowerCase()===q) return true;
-      if(c.name.toLowerCase().includes(q)) return true;
-      if(c.series.toLowerCase().includes(q)) return true;
-      if(String(c.col).padStart(3,'0').includes(q)) return true;
-      return false;
-    });
-  }
   return list;
 }
 
-// ===================== RENDER =====================
-function render(){
+function matchesQuery(car, q, qn){
+  if(!isNaN(qn) && car.col===qn) return true;
+  if(car.toy && car.toy.toLowerCase()===q) return true;
+  if(car.name.toLowerCase().includes(q)) return true;
+  if(car.series.toLowerCase().includes(q)) return true;
+  if(String(car.col).padStart(3,'0').includes(q)) return true;
+  return false;
+}
+
+// ===================== GLOBAL SEARCH (all years) =====================
+function getGlobalSearchResults(){
+  const q = query.toLowerCase().trim();
+  if(!q) return [];
+  const qn = parseInt(q,10);
+  return ALL_CARS.filter(c => canAccessYear(c.year) && matchesQuery(c,q,qn));
+}
+
+function carItemHtml(car, isOwned, isWished, showYearBadge){
+  const tags = getTags(car);
+  const tagHtml = tags.map(t=>`<span class="tag ${t.cls}">${t.label}</span>`).join('');
+  const photoData = localStorage.getItem(`hwc_photo_${userId}_${car.year}_${car.id}`);
+  const hasPhoto = !!localStorage.getItem(`hwc_photo_exists_${userId}_${car.year}_${car.id}`) || !!photoData;
+  const note = car.note ? `<span class="car-name-note"> · ${car.note}</span>` : '';
+  const yearBadge = showYearBadge ? `<span class="year-badge">${car.year}</span>` : '';
+  return `<div class="car-item${isOwned?' owned':''}${isWished&&!isOwned?' wished':''}" onclick="openDetail(${car.id},${car.year})">
+    <div class="car-col">${String(car.col).padStart(3,'0')}</div>
+    <div class="car-thumb">
+      ${hasPhoto
+        ? (photoData ? `<img src="${photoData}" alt="">` : `<span class="car-thumb-icon">📷</span>`)
+        : `<span class="car-thumb-icon">${isOwned?'✓':'🚗'}</span>`
+      }
+    </div>
+    <div class="car-info">
+      <div class="car-name">${car.name}${note}</div>
+      <div class="car-sub">
+        ${yearBadge}
+        <span class="series-badge ${sc(car.series)}">${car.series}</span>
+        <span class="series-num">${car.seriesNum||''}</span>
+        ${tagHtml}
+        ${isWished?'<span class="tag tag-wish">WANT</span>':''}
+      </div>
+    </div>
+    <div class="car-actions">
+      <button class="wish-btn${isWished?' active':''}" onclick="event.stopPropagation();quickWish(${car.id},this,${car.year})" title="Wishlist">🎯</button>
+      <button class="owned-btn${isOwned?' yes':''}" onclick="event.stopPropagation();quickOwned(${car.id},this,${car.year})"></button>
+    </div>
+  </div>`;
+}
+
+function renderGlobalResults(){
+  const listEl = document.getElementById('list');
+  const emptyEl = document.getElementById('empty');
+  const results = getGlobalSearchResults();
+  const countEl = document.getElementById('search-result-count');
+  if(!results.length){
+    listEl.innerHTML=''; emptyEl.style.display='flex';
+    if(countEl) countEl.textContent = 'No results';
+  } else {
+    emptyEl.style.display='none';
+    if(countEl){
+      const years = new Set(results.map(c=>c.year)).size;
+      countEl.textContent = `${results.length} result${results.length===1?'':'s'} across ${years} year${years===1?'':'s'}`;
+    }
+    listEl.innerHTML = results.map(car => {
+      const isOwned = owned[car.year].has(car.id);
+      const isWished = wished[car.year].has(car.id);
+      return carItemHtml(car, isOwned, isWished, true);
+    }).join('');
+  }
+}
+
+// ===================== RENDER (single-year view) =====================
+function renderYearList(){
   const data = getYearData(currentYear);
   const listEl = document.getElementById('list');
   const emptyEl = document.getElementById('empty');
@@ -100,37 +159,17 @@ function render(){
     const yset = owned[currentYear];
     const wset = wished[currentYear];
     listEl.innerHTML = filtered.map(car => {
-      const isOwned = yset.has(car.id);
-      const isWished = wset.has(car.id);
-      const tags = getTags(car);
-      const tagHtml = tags.map(t=>`<span class="tag ${t.cls}">${t.label}</span>`).join('');
-      const photoData = localStorage.getItem(`hwc_photo_${userId}_${currentYear}_${car.id}`);
-      const hasPhoto = !!localStorage.getItem(`hwc_photo_exists_${userId}_${currentYear}_${car.id}`) || !!photoData;
-      const note = car.note ? `<span class="car-name-note"> · ${car.note}</span>` : '';
-      return `<div class="car-item${isOwned?' owned':''}${isWished&&!isOwned?' wished':''}" onclick="openDetail(${car.id})">
-        <div class="car-col">${String(car.col).padStart(3,'0')}</div>
-        <div class="car-thumb">
-          ${hasPhoto
-            ? (photoData ? `<img src="${photoData}" alt="">` : `<span class="car-thumb-icon">📷</span>`)
-            : `<span class="car-thumb-icon">${isOwned?'✓':'🚗'}</span>`
-          }
-        </div>
-        <div class="car-info">
-          <div class="car-name">${car.name}${note}</div>
-          <div class="car-sub">
-            <span class="series-badge ${sc(car.series)}">${car.series}</span>
-            <span class="series-num">${car.seriesNum||''}</span>
-            ${tagHtml}
-            ${isWished?'<span class="tag tag-wish">WANT</span>':''}
-          </div>
-        </div>
-        <div class="car-actions">
-          <button class="wish-btn${isWished?' active':''}" onclick="event.stopPropagation();quickWish(${car.id},this)" title="Wishlist">🎯</button>
-          <button class="owned-btn${isOwned?' yes':''}" onclick="event.stopPropagation();quickOwned(${car.id},this)"></button>
-        </div>
-      </div>`;
+      const carWithYear = car.year!==undefined ? car : {...car, year:currentYear};
+      return carItemHtml(carWithYear, yset.has(car.id), wset.has(car.id), false);
     }).join('');
   }
+}
+
+function render(){
+  const searching = query.trim().length > 0;
+  document.getElementById('app').classList.toggle('searching', searching);
+  if(searching) renderGlobalResults();
+  else renderYearList();
 }
 
 function updateProgress(data){

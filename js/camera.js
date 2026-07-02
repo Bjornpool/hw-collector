@@ -92,7 +92,7 @@ async function deletePhotoFromStorage(year, carId){
 // ===================== PHOTOS — UI =====================
 
 async function loadPhoto(car){
-  const url = await getPhotoUrl(currentYear, car.id);
+  const url = await getPhotoUrl(car.year, car.id);
   const img = document.getElementById('detail-photo');
   const noPhoto = document.getElementById('detail-no-photo');
   const delBtn = document.getElementById('detail-photo-del');
@@ -111,7 +111,7 @@ async function loadPhoto(car){
 
 async function deletePhoto(){
   if(!currentCar || !confirm('Delete photo?')) return;
-  await deletePhotoFromStorage(currentYear, currentCar.id);
+  await deletePhotoFromStorage(currentCar.year, currentCar.id);
   loadPhoto(currentCar); render();
 }
 
@@ -119,14 +119,31 @@ async function deletePhoto(){
 
 async function openCamera(){
   if(!currentCar) return;
+  cameraMode = 'photo';
   const modal = document.getElementById('camera-modal');
   modal.classList.add('open');
+  const galleryBtn = document.getElementById('cam-gallery-btn');
+  if(galleryBtn) galleryBtn.style.display = '';
   document.getElementById('camera-car-name').textContent = currentCar.name;
   const gi = document.getElementById('cam-gallery-img');
   const gicon = document.getElementById('cam-gallery-icon');
-  const existing = await getPhotoUrl(currentYear, currentCar.id);
+  const existing = await getPhotoUrl(currentCar.year, currentCar.id);
   if(existing){ gi.src = existing; gi.style.display = 'block'; gicon.style.display = 'none'; }
   else { gi.style.display = 'none'; gicon.style.display = 'block'; }
+  startCamera();
+}
+
+// Card scan (OCR) — deliberately does NOT touch currentCar, so a stale
+// currentCar from a previous detail view can never get a photo saved
+// against it if a scan is interrupted mid-flow.
+function openScanCamera(){
+  cameraMode = 'scan';
+  currentCar = null;
+  const modal = document.getElementById('camera-modal');
+  modal.classList.add('open');
+  const galleryBtn = document.getElementById('cam-gallery-btn');
+  if(galleryBtn) galleryBtn.style.display = 'none';
+  document.getElementById('camera-car-name').textContent = 'Scan Card';
   startCamera();
 }
 
@@ -161,6 +178,22 @@ function shootPhoto(){
   const flash = document.getElementById('camera-flash');
   flash.style.transition='none'; flash.style.opacity='1';
   setTimeout(()=>{ flash.style.transition='opacity .35s'; flash.style.opacity='0'; }, 80);
+
+  if(cameraMode === 'scan'){
+    // Full frame, not the guide-box crop: the card's Col#/name text sits
+    // near the bottom edge and a tight crop would cut it off.
+    const canvas = document.createElement('canvas');
+    canvas.width = v.videoWidth;
+    canvas.height = v.videoHeight;
+    const ctx = canvas.getContext('2d');
+    if(facingMode === 'user'){
+      ctx.translate(canvas.width, 0);
+      ctx.scale(-1, 1);
+    }
+    ctx.drawImage(v, 0, 0, v.videoWidth, v.videoHeight);
+    runCardScan(canvas);
+    return;
+  }
 
   const guideBox = document.querySelector('.camera-guide-box');
   const videoRect = v.getBoundingClientRect();
@@ -213,12 +246,42 @@ function handleGalleryPhoto(e){
 
 async function savePhoto(dataUrl){
   if(!currentCar) return;
-  const ok = await uploadPhoto(dataUrl, currentYear, currentCar.id);
+  const ok = await uploadPhoto(dataUrl, currentCar.year, currentCar.id);
   if(ok){ loadPhoto(currentCar); render(); closeCamera(); }
   else { alert('Failed to save photo. Please try again.'); }
 }
 
+// Single exit point for the camera modal — always stops the media stream
+// and resets cameraMode back to 'photo', so an interrupted scan can never
+// leave a later "add photo" shot mistakenly routed into OCR (or vice versa).
 function closeCamera(){
   stopCamera();
   document.getElementById('camera-modal').classList.remove('open');
+  const loading = document.getElementById('ocr-loading');
+  if(loading) loading.style.display = 'none';
+  cameraMode = 'photo';
+}
+
+// ===================== CARD SCAN (OCR) =====================
+async function runCardScan(canvas){
+  const loading = document.getElementById('ocr-loading');
+  if(loading) loading.style.display = 'flex';
+  try {
+    const text = await recognizeCardText(canvas); // js/ocr.js
+    const q = parseCardText(text); // js/ocr.js
+    if(q){
+      const searchEl = document.getElementById('search');
+      searchEl.value = q;
+      query = q;
+      render();
+      searchEl.focus();
+    } else {
+      alert('Could not read any text from the card. Try again with better lighting/focus.');
+    }
+  } catch(e){
+    console.warn('[runCardScan] OCR failed', e);
+    alert('Could not read the card. Try again.');
+  } finally {
+    closeCamera(); // also resets cameraMode, regardless of success/failure
+  }
 }

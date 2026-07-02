@@ -1,27 +1,32 @@
 // ===================== COLLECTION TOGGLES =====================
-function quickOwned(id, btn){
-  const set = owned[currentYear];
+function quickOwned(id, btn, year=currentYear){
+  const set = owned[year];
   if(set.has(id)) set.delete(id); else set.add(id);
-  saveLocal(); syncToSupabase(currentYear, id, 'owned', set.has(id));
+  saveLocal(); syncToSupabase(year, id, 'owned', set.has(id));
   btn.classList.toggle('yes', set.has(id));
   btn.closest('.car-item').classList.toggle('owned', set.has(id));
-  const data = getYearData(currentYear);
-  updateProgress(data); updateTabCounts(data);
+  if(year===currentYear){
+    const data = getYearData(currentYear);
+    updateProgress(data); updateTabCounts(data);
+  } else {
+    buildYearBar();
+  }
 }
 
-function quickWish(id, btn){
-  const set = wished[currentYear];
+function quickWish(id, btn, year=currentYear){
+  const set = wished[year];
   if(set.has(id)) set.delete(id); else set.add(id);
-  saveLocal(); syncToSupabase(currentYear, id, 'wish', set.has(id));
+  saveLocal(); syncToSupabase(year, id, 'wish', set.has(id));
   btn.classList.toggle('active', set.has(id));
   render();
 }
 
 function toggleOwned(){
   if(!currentCar) return;
-  const set = owned[currentYear];
+  const year = currentCar.year;
+  const set = owned[year];
   if(set.has(currentCar.id)) set.delete(currentCar.id); else set.add(currentCar.id);
-  saveLocal(); syncToSupabase(currentYear, currentCar.id, 'owned', set.has(currentCar.id));
+  saveLocal(); syncToSupabase(year, currentCar.id, 'owned', set.has(currentCar.id));
   render();
   const isOwned = set.has(currentCar.id);
   const btn = document.getElementById('btn-owned');
@@ -31,9 +36,10 @@ function toggleOwned(){
 
 function toggleWish(){
   if(!currentCar) return;
-  const set = wished[currentYear];
+  const year = currentCar.year;
+  const set = wished[year];
   if(set.has(currentCar.id)) set.delete(currentCar.id); else set.add(currentCar.id);
-  saveLocal(); syncToSupabase(currentYear, currentCar.id, 'wish', set.has(currentCar.id));
+  saveLocal(); syncToSupabase(year, currentCar.id, 'wish', set.has(currentCar.id));
   render();
   const isWished = set.has(currentCar.id);
   const btn = document.getElementById('btn-wish');

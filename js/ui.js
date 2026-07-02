@@ -1,11 +1,12 @@
 // ===================== DETAIL =====================
-function openDetail(id){
-  const data = getYearData(currentYear);
-  currentCar = data ? data.find(c=>c.id===id) : null;
+function openDetail(id, year=currentYear){
+  const data = getYearData(year);
+  const found = data ? data.find(c=>c.id===id) : null;
+  currentCar = found ? {...found, year} : null;
   if(!currentCar) return;
   const car = currentCar;
-  const isOwned = owned[currentYear].has(car.id);
-  const isWished = wished[currentYear].has(car.id);
+  const isOwned = owned[year].has(car.id);
+  const isWished = wished[year].has(car.id);
 
   document.getElementById('detail-name').textContent = car.name + (car.note ? ` · ${car.note}` : '');
   const tags = getTags(car);
@@ -19,7 +20,7 @@ function openDetail(id){
     ${car.seriesNum?`<div class="detail-row"><span class="detail-row-label">Series #</span><span class="detail-row-val">${car.seriesNum}</span></div>`:''}
     ${car.note?`<div class="detail-row"><span class="detail-row-label">Variant</span><span class="detail-row-val">${car.note}</span></div>`:''}
     ${car.tags?`<div class="detail-row"><span class="detail-row-label">Info</span><span class="detail-row-val" style="font-size:11px;color:var(--text2)">${car.tags}</span></div>`:''}
-    <div class="detail-row"><span class="detail-row-label">Year</span><span class="detail-row-val">${currentYear}</span></div>
+    <div class="detail-row"><span class="detail-row-label">Year</span><span class="detail-row-val">${car.year}</span></div>
   `;
 
   const btnOwned = document.getElementById('btn-owned');
