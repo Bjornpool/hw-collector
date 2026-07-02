@@ -1,8 +1,51 @@
 // ===================== PHOTO STORAGE =====================
 
+// Single canonical size for a car's photo — used for both the list
+// thumbnail and the full detail view (no separate thumbnail file), keyed
+// identically to Storage/localStorage by (year, carId). Caps the longer
+// side at ~1000px (aspect ratio preserved, never upscales) and
+// re-encodes as JPEG q=.8 — plenty readable in the detail view, ~100-150KB.
+const PHOTO_MAX_DIMENSION = 1000;
+const PHOTO_JPEG_QUALITY = 0.8;
+
+function compressPhotoDataUrl(dataUrl){
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, PHOTO_MAX_DIMENSION / Math.max(img.width, img.height));
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', PHOTO_JPEG_QUALITY));
+    };
+    img.onerror = () => reject(new Error('Failed to decode photo for compression'));
+    img.src = dataUrl;
+  });
+}
+
 async function uploadPhoto(dataUrl, year, carId){
+  // Applies to both branches below (Storage upload and the guest/fallback
+  // localStorage base64) — one compression step, one stored file. Only
+  // ever runs on a freshly captured/picked photo here, so existing
+  // already-stored photos are never touched.
+  try {
+    const compressed = await compressPhotoDataUrl(dataUrl);
+    // An already-small/heavily-compressed input can come back LARGER
+    // after re-encoding (e.g. a tiny gallery pick that's already under
+    // 1000px) — a plain dataURL length check is enough to catch that
+    // and just keep the original instead.
+    if(compressed.length < dataUrl.length) dataUrl = compressed;
+  } catch(e){
+    console.warn('[uploadPhoto] compression failed, using original:', e);
+  }
+
   if(isGuest || !userId || !currentToken){
-    // Guest fallback — localStorage only
+    // Guest fallback — localStorage only. dataUrl here is the (possibly)
+    // compressed version from above — the only copy of the photo a guest
+    // has, since there's no Storage fallback, so keeping it small matters
+    // for avoiding QuotaExceededError as the collection grows.
     try { localStorage.setItem(`hwc_photo_${userId}_${year}_${carId}`, dataUrl); return true; }
     catch(e){ return false; }
   }
