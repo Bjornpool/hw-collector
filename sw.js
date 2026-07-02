@@ -1,4 +1,4 @@
-const CACHE_NAME = 'hwcollector-' + '2026070108';
+const CACHE_NAME = 'hwcollector-' + '2026070109';
 
 // Must succeed at install time — if any of these fail, install fails
 // loudly (see DevTools > Application > Service Workers) rather than

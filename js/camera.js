@@ -187,6 +187,31 @@ function flipCamera(){
   startCamera();
 }
 
+// #camera-video is styled with object-fit:cover — the browser uniformly
+// scales the native frame up until it fills the element, then crops
+// whatever overflows (centered) to make it fit exactly. A naive
+// videoWidth/videoRect.width ratio ignores that centered crop entirely
+// and maps CSS coordinates onto the WRONG region of the native buffer
+// whenever the video's native aspect ratio differs from the on-screen
+// element's aspect ratio (the common case on a phone: landscape sensor
+// buffer inside a portrait viewfinder). This accounts for it, so a guide
+// box the user sees on screen and the pixels actually cropped from the
+// native frame are always the same region.
+function mapCssRectToVideoPixels(video, videoRect, cssRect){
+  const coverScale = Math.max(videoRect.width / video.videoWidth, videoRect.height / video.videoHeight);
+  const visibleW = videoRect.width / coverScale;
+  const visibleH = videoRect.height / coverScale;
+  const offsetX = (video.videoWidth - visibleW) / 2;
+  const offsetY = (video.videoHeight - visibleH) / 2;
+
+  return {
+    x: offsetX + (cssRect.left - videoRect.left) / coverScale,
+    y: offsetY + (cssRect.top - videoRect.top) / coverScale,
+    w: cssRect.width / coverScale,
+    h: cssRect.height / coverScale,
+  };
+}
+
 function shootPhoto(){
   const v = document.getElementById('camera-video');
   if(!v.videoWidth) return;
@@ -203,59 +228,47 @@ function shootPhoto(){
     const scanBox = document.querySelector('.camera-scan-box');
     const videoRect = v.getBoundingClientRect();
     const boxRect = scanBox.getBoundingClientRect();
-
-    const scaleX = v.videoWidth / videoRect.width;
-    const scaleY = v.videoHeight / videoRect.height;
-    const cropX = (boxRect.left - videoRect.left) * scaleX;
-    const cropY = (boxRect.top - videoRect.top) * scaleY;
-    const cropW = boxRect.width * scaleX;
-    const cropH = boxRect.height * scaleY;
+    const crop = mapCssRectToVideoPixels(v, videoRect, boxRect);
 
     const UPSCALE = 4;
     const canvas = document.createElement('canvas');
-    canvas.width = Math.round(cropW * UPSCALE);
-    canvas.height = Math.round(cropH * UPSCALE);
+    canvas.width = Math.round(crop.w * UPSCALE);
+    canvas.height = Math.round(crop.h * UPSCALE);
     const ctx = canvas.getContext('2d');
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
 
     if(facingMode === 'user'){
-      const mirroredX = v.videoWidth - cropX - cropW;
+      const mirroredX = v.videoWidth - crop.x - crop.w;
       ctx.translate(canvas.width, 0);
       ctx.scale(-1, 1);
-      ctx.drawImage(v, mirroredX, cropY, cropW, cropH, 0, 0, canvas.width, canvas.height);
+      ctx.drawImage(v, mirroredX, crop.y, crop.w, crop.h, 0, 0, canvas.width, canvas.height);
     } else {
-      ctx.drawImage(v, cropX, cropY, cropW, cropH, 0, 0, canvas.width, canvas.height);
+      ctx.drawImage(v, crop.x, crop.y, crop.w, crop.h, 0, 0, canvas.width, canvas.height);
     }
 
-    runCardScan(canvas, { x: cropX, y: cropY, w: cropW, h: cropH });
+    runCardScan(canvas, crop);
     return;
   }
 
   const guideBox = document.querySelector('.camera-guide-box');
   const videoRect = v.getBoundingClientRect();
   const boxRect = guideBox.getBoundingClientRect();
-
-  const scaleX = v.videoWidth / videoRect.width;
-  const scaleY = v.videoHeight / videoRect.height;
-  let cropX = (boxRect.left - videoRect.left) * scaleX;
-  let cropY = (boxRect.top - videoRect.top) * scaleY;
-  const cropW = boxRect.width * scaleX;
-  const cropH = boxRect.height * scaleY;
+  const crop = mapCssRectToVideoPixels(v, videoRect, boxRect);
 
   const canvas = document.createElement('canvas');
-  canvas.width = Math.round(cropW);
-  canvas.height = Math.round(cropH);
+  canvas.width = Math.round(crop.w);
+  canvas.height = Math.round(crop.h);
   const ctx = canvas.getContext('2d');
 
   if(facingMode === 'user'){
     // Mirror: flip horizontally, adjust cropX to mirrored position
-    const mirroredX = v.videoWidth - cropX - cropW;
+    const mirroredX = v.videoWidth - crop.x - crop.w;
     ctx.translate(canvas.width, 0);
     ctx.scale(-1, 1);
-    ctx.drawImage(v, mirroredX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+    ctx.drawImage(v, mirroredX, crop.y, crop.w, crop.h, 0, 0, crop.w, crop.h);
   } else {
-    ctx.drawImage(v, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+    ctx.drawImage(v, crop.x, crop.y, crop.w, crop.h, 0, 0, crop.w, crop.h);
   }
 
   savePhoto(canvas.toDataURL('image/jpeg', .85));
