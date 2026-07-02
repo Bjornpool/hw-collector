@@ -261,6 +261,15 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
   background:rgba(0,0,0,.6);color:var(--yellow);font-size:11px;font-weight:600;
   padding:3px 10px;border-radius:20px;white-space:nowrap;
 }
+/* Scan mode: a short, wide box over the card's bottom text strip
+   (Col#/name), distinct from .camera-guide-box which frames the whole
+   car for a photo. */
+.camera-scan-guide{position:absolute;inset:0;pointer-events:none}
+.camera-scan-box{
+  position:absolute;left:9%;right:9%;bottom:14%;height:16%;
+  border:2px solid rgba(255,215,0,.75);border-radius:8px;
+  box-shadow:0 0 0 3000px rgba(0,0,0,.4);
+}
 #camera-flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}
 #ocr-loading{
   display:none;position:absolute;inset:0;flex-direction:column;align-items:center;
@@ -273,6 +282,13 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
   animation:ocr-spin .8s linear infinite;
 }
 @keyframes ocr-spin{to{transform:rotate(360deg)}}
+/* DEBUG: preview of the exact preprocessed crop sent to Tesseract.
+   Remove this rule (and the #ocr-debug-preview element/JS) once scan
+   accuracy has been validated on real cards. */
+#ocr-debug-preview{
+  width:180px;max-width:70vw;border:2px solid #fff;border-radius:6px;
+  object-fit:contain;background:#000;
+}
 .camera-controls{
   background:#0d0d0d;padding:20px 20px 40px;
   display:flex;align-items:center;justify-content:space-around;flex-shrink:0;

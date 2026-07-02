@@ -42,17 +42,64 @@ function getOcrWorker(){
   return ocrWorkerPromise;
 }
 
+// Grayscale -> contrast-stretch (min/max normalize) -> hard threshold to
+// black/white, in place. Card print photographed off-angle under phone
+// flash is low-contrast and noisy; Tesseract reads clean B/W dramatically
+// better than the raw color crop.
+function preprocessCanvasForOcr(canvas){
+  const ctx = canvas.getContext('2d');
+  const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const d = img.data;
+  const pixelCount = d.length / 4;
+
+  const gray = new Uint8ClampedArray(pixelCount);
+  let min = 255, max = 0;
+  for(let i = 0, p = 0; p < pixelCount; i += 4, p++){
+    const g = d[i] * 0.299 + d[i+1] * 0.587 + d[i+2] * 0.114;
+    gray[p] = g;
+    if(g < min) min = g;
+    if(g > max) max = g;
+  }
+
+  const range = Math.max(1, max - min);
+  const THRESHOLD = 128;
+  for(let i = 0, p = 0; p < pixelCount; i += 4, p++){
+    const stretched = (gray[p] - min) / range * 255;
+    const bw = stretched > THRESHOLD ? 255 : 0;
+    d[i] = d[i+1] = d[i+2] = bw;
+  }
+
+  ctx.putImageData(img, 0, 0);
+  return canvas;
+}
+
+// DEBUG: shows the exact preprocessed crop being fed to Tesseract.
+// Remove this call (and the #ocr-debug-preview element/CSS) once scan
+// accuracy has been validated on real cards.
+function showOcrDebugPreview(canvas){
+  const img = document.getElementById('ocr-debug-preview');
+  if(img) img.src = canvas.toDataURL('image/png');
+}
+
 async function recognizeCardText(canvas){
   const worker = await getOcrWorker();
 
-  // Pass 1: unrestricted charset — best for the car name / series text.
-  await worker.setParameters({ tessedit_char_whitelist: '' });
+  preprocessCanvasForOcr(canvas);
+  showOcrDebugPreview(canvas); // DEBUG
+
+  // Pass 1: unrestricted charset, uniform block of text (PSM 6) — best
+  // for the car name / series text, which can wrap across a couple lines.
+  await worker.setParameters({ tessedit_char_whitelist: '', tessedit_pageseg_mode: '6' });
   const { data: { text: freeText } } = await worker.recognize(canvas);
 
-  // Pass 2: digits/slash/uppercase only — tuned for Col#/Toy# tokens.
-  await worker.setParameters({ tessedit_char_whitelist: OCR_CODE_WHITELIST });
+  // Pass 2: digits/slash/uppercase only, single text line (PSM 7) — tuned
+  // for Col#/Toy# tokens like "045/250" or "HKJ88".
+  await worker.setParameters({ tessedit_char_whitelist: OCR_CODE_WHITELIST, tessedit_pageseg_mode: '7' });
   const { data: { text: codeText } } = await worker.recognize(canvas);
-  await worker.setParameters({ tessedit_char_whitelist: '' }); // leave worker clean for next scan
+
+  // Reset to Tesseract's defaults so a later "photo" flow (if it ever
+  // reuses this worker) or the next scan isn't left with a stale config.
+  await worker.setParameters({ tessedit_char_whitelist: '', tessedit_pageseg_mode: '3' });
 
   return freeText + '\n' + codeText;
 }

@@ -117,9 +117,18 @@ async function deletePhoto(){
 
 // ===================== CAMERA =====================
 
+// Swaps which viewfinder guide box is shown: the 4:3 car-framing box for
+// photo mode, or the short/wide text-strip box (bottom of the card, where
+// Col#/name print) for scan mode. Different regions, different purpose.
+function setGuideMode(mode){
+  document.getElementById('photo-guide').style.display = mode === 'photo' ? '' : 'none';
+  document.getElementById('scan-guide').style.display = mode === 'scan' ? '' : 'none';
+}
+
 async function openCamera(){
   if(!currentCar) return;
   cameraMode = 'photo';
+  setGuideMode('photo');
   const modal = document.getElementById('camera-modal');
   modal.classList.add('open');
   const galleryBtn = document.getElementById('cam-gallery-btn');
@@ -138,6 +147,7 @@ async function openCamera(){
 // against it if a scan is interrupted mid-flow.
 function openScanCamera(){
   cameraMode = 'scan';
+  setGuideMode('scan');
   currentCar = null;
   const modal = document.getElementById('camera-modal');
   modal.classList.add('open');
@@ -180,17 +190,39 @@ function shootPhoto(){
   setTimeout(()=>{ flash.style.transition='opacity .35s'; flash.style.opacity='0'; }, 80);
 
   if(cameraMode === 'scan'){
-    // Full frame, not the guide-box crop: the card's Col#/name text sits
-    // near the bottom edge and a tight crop would cut it off.
+    // Crop to the scan guide box (the card's bottom text strip), not the
+    // whole frame — a full-frame image is mostly car photo and background,
+    // which just adds noise for Tesseract. Upscale the crop afterward:
+    // it's a small region of the native 1080p+ frame, and OCR does much
+    // better on larger glyphs.
+    const scanBox = document.querySelector('.camera-scan-box');
+    const videoRect = v.getBoundingClientRect();
+    const boxRect = scanBox.getBoundingClientRect();
+
+    const scaleX = v.videoWidth / videoRect.width;
+    const scaleY = v.videoHeight / videoRect.height;
+    const cropX = (boxRect.left - videoRect.left) * scaleX;
+    const cropY = (boxRect.top - videoRect.top) * scaleY;
+    const cropW = boxRect.width * scaleX;
+    const cropH = boxRect.height * scaleY;
+
+    const UPSCALE = 2.5;
     const canvas = document.createElement('canvas');
-    canvas.width = v.videoWidth;
-    canvas.height = v.videoHeight;
+    canvas.width = Math.round(cropW * UPSCALE);
+    canvas.height = Math.round(cropH * UPSCALE);
     const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
     if(facingMode === 'user'){
+      const mirroredX = v.videoWidth - cropX - cropW;
       ctx.translate(canvas.width, 0);
       ctx.scale(-1, 1);
+      ctx.drawImage(v, mirroredX, cropY, cropW, cropH, 0, 0, canvas.width, canvas.height);
+    } else {
+      ctx.drawImage(v, cropX, cropY, cropW, cropH, 0, 0, canvas.width, canvas.height);
     }
-    ctx.drawImage(v, 0, 0, v.videoWidth, v.videoHeight);
+
     runCardScan(canvas);
     return;
   }
