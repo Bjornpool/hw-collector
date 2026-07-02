@@ -80,18 +80,11 @@ function getGlobalSearchResults(){
 function carItemHtml(car, isOwned, isWished, showYearBadge){
   const tags = getTags(car);
   const tagHtml = tags.map(t=>`<span class="tag ${t.cls}">${t.label}</span>`).join('');
-  const photoData = localStorage.getItem(`hwc_photo_${userId}_${car.year}_${car.id}`);
-  const hasPhoto = !!localStorage.getItem(`hwc_photo_exists_${userId}_${car.year}_${car.id}`) || !!photoData;
   const note = car.note ? `<span class="car-name-note"> · ${car.note}</span>` : '';
   const yearBadge = showYearBadge ? `<span class="year-badge">${car.year}</span>` : '';
   return `<div class="car-item${isOwned?' owned':''}${isWished&&!isOwned?' wished':''}" onclick="openDetail(${car.id},${car.year})">
     <div class="car-col">${String(car.col).padStart(3,'0')}</div>
-    <div class="car-thumb">
-      ${hasPhoto
-        ? (photoData ? `<img src="${photoData}" alt="">` : `<span class="car-thumb-icon">📷</span>`)
-        : `<span class="car-thumb-icon">${isOwned?'✓':'🚗'}</span>`
-      }
-    </div>
+    <div class="car-thumb">${carThumbMarkup(car, isOwned)}</div>
     <div class="car-info">
       <div class="car-name">${car.name}${note}</div>
       <div class="car-sub">
@@ -128,6 +121,7 @@ function renderGlobalResults(){
       const isWished = wished[car.year].has(car.id);
       return carItemHtml(car, isOwned, isWished, true);
     }).join('');
+    wireLazyPhotoThumbs();
   }
 }
 
@@ -162,6 +156,7 @@ function renderYearList(){
       const carWithYear = car.year!==undefined ? car : {...car, year:currentYear};
       return carItemHtml(carWithYear, yset.has(car.id), wset.has(car.id), false);
     }).join('');
+    wireLazyPhotoThumbs();
   }
 }
 

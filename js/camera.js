@@ -77,6 +77,7 @@ async function uploadPhoto(dataUrl, year, carId){
       if(putRes.ok){
         localStorage.setItem(`hwc_photo_exists_${userId}_${year}_${carId}`, '1');
         localStorage.removeItem(`hwc_photo_${userId}_${year}_${carId}`);
+        invalidatePhotoUrlCache(path); // "Change" replaced the file at this path — re-sign next time so we get a fresh URL, not one the browser may have already cached the pre-upload bytes for
         return true;
       }
     }
@@ -84,6 +85,7 @@ async function uploadPhoto(dataUrl, year, carId){
     if(res.ok){
       localStorage.setItem(`hwc_photo_exists_${userId}_${year}_${carId}`, '1');
       localStorage.removeItem(`hwc_photo_${userId}_${year}_${carId}`);
+      invalidatePhotoUrlCache(path);
       return true;
     }
 
@@ -124,12 +126,171 @@ async function deletePhotoFromStorage(year, carId){
   localStorage.removeItem(`hwc_photo_exists_${userId}_${year}_${carId}`);
   if(isGuest || !userId || !currentToken) return;
   const path = `${userId}/${year}/${carId}.jpg`;
+  invalidatePhotoUrlCache(path);
   try {
     await fetch(`${SUPABASE_URL}/storage/v1/object/car-photos/${path}`, {
       method: 'DELETE',
       headers: { 'Authorization': 'Bearer ' + currentToken, 'apikey': SUPABASE_KEY }
     });
   } catch(e){ console.warn('[deletePhotoFromStorage] error:', e); }
+}
+
+// ===================== LIST THUMBNAILS (signed URLs) =====================
+// Storage-backed photos (hwc_photo_exists_* set, but no local base64 copy)
+// can't go straight into <img src> — the car-photos bucket is private.
+// A signed URL is a lightweight round-trip (mints a URL, doesn't transfer
+// image bytes); the browser then loads/caches the actual image natively
+// via a normal <img> request. Signing all ~441 rows synchronously on every
+// render/keystroke would be wasteful, so thumbnails are only signed once
+// they actually scroll into view, batched via Supabase's bulk-sign
+// endpoint, and cached in memory keyed by Storage path.
+
+const PHOTO_SIGN_EXPIRES_IN = 86400; // 24h — outlives a PWA session left open in the background
+const PHOTO_OBSERVER_ROOT_MARGIN = '400px 0px'; // start signing before the row is actually on screen
+const PHOTO_BATCH_DEBOUNCE_MS = 50; // groups rows that cross into view together into one bulk-sign call
+
+const photoUrlCache = new Map(); // Storage path -> {url, expiresAt}
+let photoThumbObserver = null;
+let pendingPhotoPaths = new Set();
+let pendingPhotoEls = new Map(); // path -> Set of placeholder elements waiting on that path
+let photoBatchTimer = null;
+
+function getCachedPhotoUrl(path){
+  const entry = photoUrlCache.get(path);
+  if(entry && entry.expiresAt > Date.now()) return entry.url;
+  if(entry) photoUrlCache.delete(path); // expired
+  return null;
+}
+
+function invalidatePhotoUrlCache(path){
+  photoUrlCache.delete(path);
+}
+
+// TEMP DEBUG: log the raw bulk-sign response shape once, so it can be
+// confirmed against what resolveSignedPhotoUrl() below assumes (field
+// name signedURL vs signedUrl, relative vs absolute). Remove this flag
+// and the console.log below it once confirmed.
+let loggedBulkSignSample = false;
+
+// The bulk endpoint (unlike the single-path createSignedUrl) returns
+// signedURL as a path RELATIVE to /storage/v1 — e.g.
+// "/object/sign/car-photos/xxx?token=..." — with no host and no
+// "/storage/v1" prefix. Dropped straight into <img src>, that resolves
+// against the app's own origin (hw-collector.vercel.app) and 404s. This
+// normalizes both the relative case and (defensively) an already-full
+// URL, and accepts either field-name casing the API might use.
+function resolveSignedPhotoUrl(signed){
+  if(!signed) return null;
+  if(signed.startsWith('http')) return signed;
+  return `${SUPABASE_URL}/storage/v1${signed.startsWith('/') ? '' : '/'}${signed}`;
+}
+
+async function bulkSignPhotoUrls(paths){
+  if(!paths.length || isGuest || !userId || !currentToken) return;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/car-photos`, {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + currentToken,
+        'apikey': SUPABASE_KEY,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ expiresIn: PHOTO_SIGN_EXPIRES_IN, paths })
+    });
+    if(!res.ok) return;
+    const results = await res.json();
+    if(!loggedBulkSignSample){
+      loggedBulkSignSample = true;
+      console.log('[bulkSignPhotoUrls] TEMP DEBUG raw response:', JSON.stringify(results));
+    }
+    const expiresAt = Date.now() + PHOTO_SIGN_EXPIRES_IN * 1000;
+    (results || []).forEach(r => {
+      const signed = r && (r.signedURL || r.signedUrl); // API casing not verified live — handle both
+      if(!signed || !r.path) return;
+      photoUrlCache.set(r.path, { url: resolveSignedPhotoUrl(signed), expiresAt });
+    });
+  } catch(e){ console.warn('[bulkSignPhotoUrls] error:', e); }
+}
+
+function handlePhotoThumbError(imgEl, isOwned){
+  imgEl.outerHTML = `<span class="car-thumb-icon">${isOwned?'✓':'🚗'}</span>`;
+}
+
+function getPhotoThumbObserver(){
+  if(!photoThumbObserver){
+    photoThumbObserver = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if(!entry.isIntersecting) return;
+        const el = entry.target;
+        photoThumbObserver.unobserve(el);
+        const path = el.dataset.photoPath;
+        if(!path) return;
+        if(!pendingPhotoEls.has(path)) pendingPhotoEls.set(path, new Set());
+        pendingPhotoEls.get(path).add(el);
+        pendingPhotoPaths.add(path);
+      });
+      if(photoBatchTimer) clearTimeout(photoBatchTimer);
+      photoBatchTimer = setTimeout(flushPhotoSignBatch, PHOTO_BATCH_DEBOUNCE_MS);
+    }, { rootMargin: PHOTO_OBSERVER_ROOT_MARGIN });
+  }
+  return photoThumbObserver;
+}
+
+async function flushPhotoSignBatch(){
+  photoBatchTimer = null;
+  const paths = [...pendingPhotoPaths];
+  pendingPhotoPaths.clear();
+  if(!paths.length) return;
+
+  // A path may already have been resolved by an earlier overlapping batch.
+  const toSign = paths.filter(p => !getCachedPhotoUrl(p));
+  if(toSign.length) await bulkSignPhotoUrls(toSign);
+
+  paths.forEach(path => {
+    const url = getCachedPhotoUrl(path);
+    const els = pendingPhotoEls.get(path);
+    pendingPhotoEls.delete(path);
+    if(!els) return;
+    els.forEach(el => {
+      if(!el.isConnected) return; // row was replaced by a re-render before this resolved
+      const isOwned = el.dataset.owned === '1';
+      el.outerHTML = url
+        ? `<img src="${url}" alt="" onerror="handlePhotoThumbError(this,${isOwned})">`
+        : `<span class="car-thumb-icon">${isOwned?'✓':'🚗'}</span>`;
+    });
+  });
+}
+
+// Called after every list render to (re)wire the observer onto any lazy
+// thumbnail placeholders in the freshly-rendered DOM.
+function wireLazyPhotoThumbs(){
+  const observer = getPhotoThumbObserver();
+  document.querySelectorAll('#list .car-thumb-icon[data-photo-path]').forEach(el => observer.observe(el));
+}
+
+// Returns the HTML for a single car's list thumbnail. Three cases:
+//  - photoData in localStorage (guest, or a failed-upload fallback copy):
+//    already in memory, render the <img> immediately, no signing needed.
+//  - hwc_photo_exists_* set (Storage-backed, authenticated user): render a
+//    lazy placeholder tagged with the Storage path (or use an already-
+//    cached signed URL immediately, skipping the round-trip on re-render).
+//  - no photo at all: the existing owned/not-owned icon.
+function carThumbMarkup(car, isOwned){
+  const key = `${userId}_${car.year}_${car.id}`;
+  const photoData = localStorage.getItem(`hwc_photo_${key}`);
+  if(photoData){
+    return `<img src="${photoData}" alt="" onerror="handlePhotoThumbError(this,${isOwned})">`;
+  }
+  const hasPhoto = !!localStorage.getItem(`hwc_photo_exists_${key}`);
+  if(hasPhoto){
+    const path = `${userId}/${car.year}/${car.id}.jpg`;
+    const cachedUrl = getCachedPhotoUrl(path);
+    if(cachedUrl){
+      return `<img src="${cachedUrl}" alt="" onerror="handlePhotoThumbError(this,${isOwned})">`;
+    }
+    return `<span class="car-thumb-icon" data-photo-path="${path}" data-owned="${isOwned?1:0}">📷</span>`;
+  }
+  return `<span class="car-thumb-icon">${isOwned?'✓':'🚗'}</span>`;
 }
 
 // ===================== PHOTOS — UI =====================
