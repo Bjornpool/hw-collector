@@ -166,8 +166,6 @@ if('serviceWorker' in navigator){
     <div id="ocr-loading">
       <div class="ocr-spinner"></div>
       <span>Reading card…</span>
-      <!-- DEBUG: shows the exact preprocessed crop fed to Tesseract. Remove once scan accuracy is validated. -->
-      <img id="ocr-debug-preview" alt="OCR input preview">
     </div>
   </div>
   <div class="camera-controls">
@@ -179,6 +177,24 @@ if('serviceWorker' in navigator){
     </div>
     <button id="shutter" onclick="shootPhoto()"><div class="shutter-inner"></div></button>
     <button class="cam-flip" onclick="flipCamera()">🔄</button>
+  </div>
+</div>
+
+<!-- OCR DEBUG PANEL (temporary — remove after calibration, see js/ocr.js
+     showOcrDebugPanel/closeOcrDebugPanel). Deliberately OUTSIDE
+     #camera-modal: closeCamera() runs right after every scan and hides
+     the whole camera modal, which was swallowing the old in-modal
+     preview before it could be read. This panel stays open until the
+     "Zamknij" button is tapped. -->
+<div id="ocr-debug-panel">
+  <div class="ocr-debug-card">
+    <div class="ocr-debug-header">
+      <span>OCR debug</span>
+      <button onclick="closeOcrDebugPanel()">Zamknij</button>
+    </div>
+    <img id="ocr-debug-img" alt="Processed OCR input">
+    <div class="ocr-debug-crop" id="ocr-debug-crop"></div>
+    <pre class="ocr-debug-text" id="ocr-debug-text"></pre>
   </div>
 </div>
 

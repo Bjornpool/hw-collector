@@ -104,19 +104,46 @@ function preprocessCanvasForOcr(canvas){
   return canvas;
 }
 
-// DEBUG: shows the exact preprocessed crop being fed to Tesseract.
-// Remove this call (and the #ocr-debug-preview element/CSS) once scan
-// accuracy has been validated on real cards.
-function showOcrDebugPreview(canvas){
-  const img = document.getElementById('ocr-debug-preview');
-  if(img) img.src = canvas.toDataURL('image/png');
+// DEBUG: persistent panel (outside #camera-modal — see index.html) that
+// shows exactly what Tesseract received: the processed crop at full
+// size, the source-frame crop coordinates, and the raw text from both
+// OCR passes. Stays open until "Zamknij" is tapped — closeCamera() does
+// NOT touch it. Also logs the crop's data URL to the console so it can
+// be pulled out and inspected/saved from there.
+// Remove this function (and its call site, and the #ocr-debug-panel
+// markup/CSS) once scan accuracy has been validated on real cards.
+function showOcrDebugPanel(canvas, cropInfo, freeText, codeText){
+  const dataUrl = canvas.toDataURL('image/png');
+  console.log('[OCR debug] processed crop data URL:', dataUrl);
+
+  const img = document.getElementById('ocr-debug-img');
+  if(img) img.src = dataUrl;
+
+  const cropEl = document.getElementById('ocr-debug-crop');
+  if(cropEl && cropInfo){
+    cropEl.textContent = `crop (source frame px): x=${Math.round(cropInfo.x)} y=${Math.round(cropInfo.y)} w=${Math.round(cropInfo.w)} h=${Math.round(cropInfo.h)}`;
+  }
+
+  const textEl = document.getElementById('ocr-debug-text');
+  if(textEl){
+    textEl.textContent =
+      `--- Pass 1: free text (PSM 6) ---\n${freeText || '(empty)'}\n\n` +
+      `--- Pass 2: code, whitelist (PSM 7) ---\n${codeText || '(empty)'}`;
+  }
+
+  const panel = document.getElementById('ocr-debug-panel');
+  if(panel) panel.classList.add('open');
+}
+
+function closeOcrDebugPanel(){
+  const panel = document.getElementById('ocr-debug-panel');
+  if(panel) panel.classList.remove('open');
 }
 
 async function recognizeCardText(canvas){
   const worker = await getOcrWorker();
 
   preprocessCanvasForOcr(canvas);
-  showOcrDebugPreview(canvas); // DEBUG
 
   // Pass 1: unrestricted charset, uniform block of text (PSM 6) — best
   // for the car name / series text, which can wrap across a couple lines.
@@ -132,7 +159,7 @@ async function recognizeCardText(canvas){
   // reuses this worker) or the next scan isn't left with a stale config.
   await worker.setParameters({ tessedit_char_whitelist: '', tessedit_pageseg_mode: '3' });
 
-  return freeText + '\n' + codeText;
+  return { freeText, codeText, canvas };
 }
 
 function cleanOcrLine(line){

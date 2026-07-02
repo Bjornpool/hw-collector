@@ -282,12 +282,36 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
   animation:ocr-spin .8s linear infinite;
 }
 @keyframes ocr-spin{to{transform:rotate(360deg)}}
-/* DEBUG: preview of the exact preprocessed crop sent to Tesseract.
-   Remove this rule (and the #ocr-debug-preview element/JS) once scan
-   accuracy has been validated on real cards. */
-#ocr-debug-preview{
-  width:180px;max-width:70vw;border:2px solid #fff;border-radius:6px;
-  object-fit:contain;background:#000;
+/* DEBUG: persistent OCR inspection panel — outside #camera-modal on
+   purpose (see the HTML comment above it). Remove this whole block
+   (and the #ocr-debug-panel markup/JS) once scan accuracy has been
+   validated on real cards. */
+#ocr-debug-panel{
+  display:none;position:fixed;inset:0;z-index:400;
+  background:rgba(0,0,0,.85);overflow-y:auto;padding:16px;
+}
+#ocr-debug-panel.open{display:flex;align-items:flex-start;justify-content:center}
+.ocr-debug-card{
+  background:var(--surface);border-radius:12px;padding:14px;
+  max-width:480px;width:100%;
+}
+.ocr-debug-header{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:10px;font-weight:700;color:var(--text);
+}
+.ocr-debug-header button{
+  background:var(--red);color:#fff;border:none;border-radius:8px;
+  padding:6px 14px;font-weight:600;cursor:pointer;
+}
+#ocr-debug-img{
+  width:100%;border-radius:8px;background:#000;
+  image-rendering:pixelated; /* show the actual thresholded pixels, not a smoothed blow-up */
+}
+.ocr-debug-crop{font-size:11px;color:var(--text2);margin:8px 0;font-family:monospace}
+.ocr-debug-text{
+  font-size:11px;color:var(--text);background:var(--surface2);
+  border-radius:8px;padding:10px;white-space:pre-wrap;word-break:break-word;
+  max-height:200px;overflow-y:auto;font-family:monospace;
 }
 .camera-controls{
   background:#0d0d0d;padding:20px 20px 40px;

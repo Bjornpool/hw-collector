@@ -228,7 +228,7 @@ function shootPhoto(){
       ctx.drawImage(v, cropX, cropY, cropW, cropH, 0, 0, canvas.width, canvas.height);
     }
 
-    runCardScan(canvas);
+    runCardScan(canvas, { x: cropX, y: cropY, w: cropW, h: cropH });
     return;
   }
 
@@ -300,12 +300,13 @@ function closeCamera(){
 }
 
 // ===================== CARD SCAN (OCR) =====================
-async function runCardScan(canvas){
+async function runCardScan(canvas, cropInfo){
   const loading = document.getElementById('ocr-loading');
   if(loading) loading.style.display = 'flex';
   try {
-    const text = await recognizeCardText(canvas); // js/ocr.js
-    const q = parseCardText(text); // js/ocr.js
+    const { freeText, codeText, canvas: processedCanvas } = await recognizeCardText(canvas); // js/ocr.js
+    showOcrDebugPanel(processedCanvas, cropInfo, freeText, codeText); // js/ocr.js — DEBUG, stays open until dismissed
+    const q = parseCardText(freeText + '\n' + codeText); // js/ocr.js
     if(q){
       const searchEl = document.getElementById('search');
       searchEl.value = q;
@@ -319,6 +320,9 @@ async function runCardScan(canvas){
     console.warn('[runCardScan] OCR failed', e);
     alert('Could not read the card. Try again.');
   } finally {
-    closeCamera(); // also resets cameraMode, regardless of success/failure
+    // Stops the camera stream and resets cameraMode. Safe to do
+    // immediately: the debug panel lives outside #camera-modal, so this
+    // no longer hides it (that was the original bug).
+    closeCamera();
   }
 }
