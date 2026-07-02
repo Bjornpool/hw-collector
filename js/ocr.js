@@ -162,28 +162,102 @@ async function recognizeCardText(canvas){
   return { freeText, codeText, canvas };
 }
 
+// ===================== OCR-NOISE-TOLERANT MATCHING =====================
+// Real-world scans come back as correct text plus junk from adjacent
+// print — "7 BMWSO7- TO" for "BMW507", "7 1/250" for "67/250". Exact
+// substring matching (matchesQuery in render.js, used by the live search
+// box) is intentionally strict/predictable for typed input; it's too
+// strict for this. This is a separate, tolerant scorer used only to
+// resolve OCR output to a car — render.js/matchesQuery is untouched, so
+// normal typed search keeps behaving exactly as before.
+
+// Letters Tesseract commonly confuses with digits or with each other.
+// Normalizing both the OCR text and the car data through this same map
+// makes "S"/"5", "O"/"0", etc. equivalent for comparison purposes.
+const OCR_CONFUSABLE_MAP = { O:'0', I:'1', L:'1', S:'5', Z:'2', B:'8', G:'6' };
+
+function normalizeForOcrMatch(s){
+  return (s || '')
+    .toUpperCase()
+    .replace(/[\s\-.]/g, '')
+    .replace(/[OILSZBG]/g, ch => OCR_CONFUSABLE_MAP[ch]);
+}
+
+function ocrTokens(text){
+  return (text || '')
+    .split(/[^A-Za-z0-9]+/)
+    .filter(t => t.length >= 3) // drop 1-2 char fragments — too noisy to mean anything
+    .map(normalizeForOcrMatch);
+}
+
+// "045/250", or noisy variants like "7 1/250" — pulls the number before
+// the slash as a Col# guess.
+function extractColGuess(text){
+  const m = (text || '').match(/(\d{1,3})\s*\/\s*\d{2,3}/);
+  return m ? m[1] : null;
+}
+
+// The longest OCR token that's a substring of the car's normalized
+// name/toy wins (a toy-code hit counts for a bit more, since it's a
+// shorter/more specific string than a name). An exact Col# match, or a
+// Col# match missing just its leading digit (OCR dropping the "6" from
+// "67"), adds a strong bonus on top.
+function scoreCarAgainstOcr(car, tokens, colGuess){
+  let score = 0;
+  const normName = normalizeForOcrMatch(car.name);
+  const normToy = car.toy ? normalizeForOcrMatch(car.toy) : '';
+
+  for(const tok of tokens){
+    if(normName.includes(tok)) score = Math.max(score, tok.length);
+    if(normToy && normToy.includes(tok)) score = Math.max(score, tok.length + 2);
+  }
+
+  if(colGuess){
+    const colStr = String(car.col);
+    if(colStr === colGuess) score += 20;
+    else if(colStr.endsWith(colGuess)) score += 8;
+  }
+
+  return score;
+}
+
+// Below this, treat it as noise rather than a real hit — a single
+// 3-letter token match shouldn't be enough to pick a car out of ~1450.
+const OCR_MATCH_MIN_SCORE = 4;
+
+function findBestCardMatch(rawText){
+  const tokens = ocrTokens(rawText);
+  const colGuess = extractColGuess(rawText);
+  if(!tokens.length && !colGuess) return null;
+
+  let best = null, bestScore = 0;
+  for(const car of ALL_CARS){
+    if(!canAccessYear(car.year)) continue;
+    const score = scoreCarAgainstOcr(car, tokens, colGuess);
+    if(score > bestScore){ best = car; bestScore = score; }
+  }
+  return bestScore >= OCR_MATCH_MIN_SCORE ? best : null;
+}
+
 function cleanOcrLine(line){
   return line.replace(/[^\p{L}\p{N}\s\/#'-]/gu, '').replace(/\s+/g, ' ').trim();
 }
 
-// Doesn't do its own fuzzy matching — reuses the exact same matchesQuery()
-// logic as global search (render.js) so "found a match" here means the
-// global search box will show the same result. If no line matches
-// anything in ALL_CARS, falls back to the longest cleaned line so the
-// user still has something sensible to edit in the search box.
+// Tries the tolerant matcher above first. A confident hit returns that
+// car's own exact name — guaranteed to match itself in the plain
+// substring search (matchesQuery), so the noisy OCR text never has to
+// survive verbatim into the search box. Falls back to the longest
+// cleaned line so there's still something sensible to edit by hand when
+// nothing scored high enough to trust.
 function parseCardText(rawText){
+  const best = findBestCardMatch(rawText);
+  if(best) return best.name;
+
   const lines = (rawText || '')
     .split('\n')
     .map(cleanOcrLine)
     .filter(l => l.length >= 2);
 
-  for(const line of lines){
-    const q = line.toLowerCase().trim();
-    const qn = parseInt(q, 10);
-    const hit = ALL_CARS.some(c => canAccessYear(c.year) && matchesQuery(c, q, qn));
-    if(hit) return line;
-  }
-
   if(!lines.length) return '';
-  return lines.reduce((best, l) => l.length > best.length ? l : best, lines[0]);
+  return lines.reduce((longest, l) => l.length > longest.length ? l : longest, lines[0]);
 }
