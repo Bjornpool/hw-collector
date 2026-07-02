@@ -117,22 +117,8 @@ async function deletePhoto(){
 
 // ===================== CAMERA =====================
 
-// Swaps which viewfinder guide box is shown: the 4:3 car-framing box for
-// photo mode, or the short/wide text-strip box (bottom of the card, where
-// Col#/name print) for scan mode. Different regions, different purpose.
-// Purely visual — null-safe on both lookups so a missing/renamed element
-// (e.g. a stale cached index.html momentarily out of sync with a fresh
-// camera.js) can never throw and take the actual camera stream down with it.
-function setGuideMode(mode){
-  const photoGuide = document.getElementById('photo-guide');
-  const scanGuide = document.getElementById('scan-guide');
-  if(photoGuide) photoGuide.style.display = mode === 'photo' ? '' : 'none';
-  if(scanGuide) scanGuide.style.display = mode === 'scan' ? '' : 'none';
-}
-
 async function openCamera(){
   if(!currentCar) return;
-  cameraMode = 'photo';
   const modal = document.getElementById('camera-modal');
   modal.classList.add('open');
   const galleryBtn = document.getElementById('cam-gallery-btn');
@@ -144,22 +130,6 @@ async function openCamera(){
   if(existing){ gi.src = existing; gi.style.display = 'block'; gicon.style.display = 'none'; }
   else { gi.style.display = 'none'; gicon.style.display = 'block'; }
   startCamera();
-  setGuideMode('photo'); // after starting the stream: a guide-box hiccup must never block the camera itself
-}
-
-// Card scan (OCR) — deliberately does NOT touch currentCar, so a stale
-// currentCar from a previous detail view can never get a photo saved
-// against it if a scan is interrupted mid-flow.
-function openScanCamera(){
-  cameraMode = 'scan';
-  currentCar = null;
-  const modal = document.getElementById('camera-modal');
-  modal.classList.add('open');
-  const galleryBtn = document.getElementById('cam-gallery-btn');
-  if(galleryBtn) galleryBtn.style.display = 'none';
-  document.getElementById('camera-car-name').textContent = 'Scan Card';
-  startCamera();
-  setGuideMode('scan'); // after starting the stream, same reasoning as openCamera()
 }
 
 function startCamera(){
@@ -219,38 +189,6 @@ function shootPhoto(){
   flash.style.transition='none'; flash.style.opacity='1';
   setTimeout(()=>{ flash.style.transition='opacity .35s'; flash.style.opacity='0'; }, 80);
 
-  if(cameraMode === 'scan'){
-    // Crop to the scan guide box (the card's bottom text strip), not the
-    // whole frame — a full-frame image is mostly car photo and background,
-    // which just adds noise for Tesseract. Upscale the crop afterward:
-    // it's a small region of the native 1080p+ frame, and OCR does much
-    // better on larger glyphs.
-    const scanBox = document.querySelector('.camera-scan-box');
-    const videoRect = v.getBoundingClientRect();
-    const boxRect = scanBox.getBoundingClientRect();
-    const crop = mapCssRectToVideoPixels(v, videoRect, boxRect);
-
-    const UPSCALE = 4;
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.round(crop.w * UPSCALE);
-    canvas.height = Math.round(crop.h * UPSCALE);
-    const ctx = canvas.getContext('2d');
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-
-    if(facingMode === 'user'){
-      const mirroredX = v.videoWidth - crop.x - crop.w;
-      ctx.translate(canvas.width, 0);
-      ctx.scale(-1, 1);
-      ctx.drawImage(v, mirroredX, crop.y, crop.w, crop.h, 0, 0, canvas.width, canvas.height);
-    } else {
-      ctx.drawImage(v, crop.x, crop.y, crop.w, crop.h, 0, 0, canvas.width, canvas.height);
-    }
-
-    runCardScan(canvas, crop);
-    return;
-  }
-
   const guideBox = document.querySelector('.camera-guide-box');
   const videoRect = v.getBoundingClientRect();
   const boxRect = guideBox.getBoundingClientRect();
@@ -301,41 +239,7 @@ async function savePhoto(dataUrl){
   else { alert('Failed to save photo. Please try again.'); }
 }
 
-// Single exit point for the camera modal — always stops the media stream
-// and resets cameraMode back to 'photo', so an interrupted scan can never
-// leave a later "add photo" shot mistakenly routed into OCR (or vice versa).
 function closeCamera(){
   stopCamera();
   document.getElementById('camera-modal').classList.remove('open');
-  const loading = document.getElementById('ocr-loading');
-  if(loading) loading.style.display = 'none';
-  cameraMode = 'photo';
-}
-
-// ===================== CARD SCAN (OCR) =====================
-async function runCardScan(canvas, cropInfo){
-  const loading = document.getElementById('ocr-loading');
-  if(loading) loading.style.display = 'flex';
-  try {
-    const { freeText, codeText, canvas: processedCanvas } = await recognizeCardText(canvas); // js/ocr.js
-    showOcrDebugPanel(processedCanvas, cropInfo, freeText, codeText); // js/ocr.js — DEBUG, stays open until dismissed
-    const q = parseCardText(freeText + '\n' + codeText); // js/ocr.js
-    if(q){
-      const searchEl = document.getElementById('search');
-      searchEl.value = q;
-      query = q;
-      render();
-      searchEl.focus();
-    } else {
-      alert('Could not read any text from the card. Try again with better lighting/focus.');
-    }
-  } catch(e){
-    console.warn('[runCardScan] OCR failed', e);
-    alert('Could not read the card. Try again.');
-  } finally {
-    // Stops the camera stream and resets cameraMode. Safe to do
-    // immediately: the debug panel lives outside #camera-modal, so this
-    // no longer hides it (that was the original bug).
-    closeCamera();
-  }
 }

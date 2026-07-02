@@ -33,7 +33,6 @@ YEARS.forEach(y => { owned[y] = new Set(); wished[y] = new Set(); });
 // Camera
 let cameraStream = null;
 let facingMode = 'environment';
-let cameraMode = 'photo'; // 'photo' (per-car detail shot) or 'scan' (card OCR)
 
 // ===================== SERIES CLASS MAP =====================
 const SC = {
