@@ -101,6 +101,15 @@ async function uploadPhoto(dataUrl, year, carId){
   }
 }
 
+// The exists-flag says Storage has this photo; a 404 says it doesn't
+// (an upload that got interrupted after the flag was already written, or
+// the object removed outside the app). Clearing it here puts the car
+// back into a clean "no photo" state instead of a permanent dead
+// reference the user can never get rid of.
+function clearOrphanedPhotoFlag(year, carId){
+  localStorage.removeItem(`hwc_photo_exists_${userId}_${year}_${carId}`);
+}
+
 async function getPhotoUrl(year, carId){
   // Check localStorage first — may be base64 fallback from failed upload
   const cached = localStorage.getItem(`hwc_photo_${userId}_${year}_${carId}`);
@@ -115,24 +124,60 @@ async function getPhotoUrl(year, carId){
     const res = await fetch(url, {
       headers: { 'Authorization': 'Bearer ' + currentToken, 'apikey': SUPABASE_KEY }
     });
+    if(res.status === 404){
+      clearOrphanedPhotoFlag(year, carId);
+      return null;
+    }
     if(!res.ok) return null;
     const blob = await res.blob();
     return URL.createObjectURL(blob);
   } catch(e){ console.warn('[getPhotoUrl] error:', e); return null; }
 }
 
+// Returns true once the photo is confirmed gone (and only then clears
+// local state) or false if that couldn't be confirmed. Deleting from
+// Storage FIRST and gating the local hwc_photo_/hwc_photo_exists_
+// cleanup on the actual result — rather than clearing optimistically
+// before the request even runs — is what prevents this from creating
+// its own version of the orphaned-flag bug (just inverted: a file left
+// behind in Storage that the app has already forgotten about).
 async function deletePhotoFromStorage(year, carId){
-  localStorage.removeItem(`hwc_photo_${userId}_${year}_${carId}`);
-  localStorage.removeItem(`hwc_photo_exists_${userId}_${year}_${carId}`);
-  if(isGuest || !userId || !currentToken) return;
+  const localKey = `hwc_photo_${userId}_${year}_${carId}`;
+  const existsKey = `hwc_photo_exists_${userId}_${year}_${carId}`;
+
+  if(isGuest || !userId || !currentToken){
+    // No Storage involved for guests — the local base64 copy IS the
+    // photo, so clearing it here is the actual (and only) deletion.
+    localStorage.removeItem(localKey);
+    localStorage.removeItem(existsKey);
+    return true;
+  }
+
   const path = `${userId}/${year}/${carId}.jpg`;
-  invalidatePhotoUrlCache(path);
   try {
-    await fetch(`${SUPABASE_URL}/storage/v1/object/car-photos/${path}`, {
+    const res = await fetch(`${SUPABASE_URL}/storage/v1/object/car-photos/${path}`, {
       method: 'DELETE',
       headers: { 'Authorization': 'Bearer ' + currentToken, 'apikey': SUPABASE_KEY }
     });
-  } catch(e){ console.warn('[deletePhotoFromStorage] error:', e); }
+    if(!res.ok && res.status !== 404){
+      // 401/403/429/500 etc. — delete did not happen (or we can't tell),
+      // so the file may still be there. Leave hwc_photo_exists_ set and
+      // tell the caller it failed.
+      console.warn('[deletePhotoFromStorage] delete failed:', res.status);
+      return false;
+    }
+    // res.ok (deleted) or 404 (already gone) — object confirmed absent,
+    // safe to drop local state.
+    invalidatePhotoUrlCache(path);
+    localStorage.removeItem(localKey);
+    localStorage.removeItem(existsKey);
+    return true;
+  } catch(e){
+    // Network error (e.g. offline) — unknown outcome, so don't touch
+    // local state; treat it the same as a failure.
+    console.warn('[deletePhotoFromStorage] error:', e);
+    return false;
+  }
 }
 
 // ===================== LIST THUMBNAILS (signed URLs) =====================
@@ -216,6 +261,26 @@ function handlePhotoThumbError(imgEl, isOwned){
   imgEl.outerHTML = `<span class="car-thumb-icon">${isOwned?'✓':'🚗'}</span>`;
 }
 
+// <img onerror> fires for lots of reasons (network blip mid-scroll, CORS,
+// a slow/timed-out load) and doesn't expose the HTTP status — clearing
+// the exists-flag on any of those would risk wiping it for a photo
+// that's actually fine. So this swaps in the placeholder immediately
+// (same as handlePhotoThumbError), then does one lightweight re-check
+// with an explicit fetch, and only clears the flag on a confirmed 404 —
+// same rule as the detail-view path in getPhotoUrl.
+async function handleSignedPhotoThumbError(imgEl, isOwned, year, carId){
+  const failedUrl = imgEl.src;
+  imgEl.outerHTML = `<span class="car-thumb-icon">${isOwned?'✓':'🚗'}</span>`;
+  try {
+    const res = await fetch(failedUrl, { method: 'HEAD' });
+    if(res.status === 404) clearOrphanedPhotoFlag(year, carId);
+  } catch(e){ /* transient — leave the flag alone */ }
+}
+
+function signedPhotoImgHtml(url, isOwned, year, carId){
+  return `<img src="${url}" alt="" onerror="handleSignedPhotoThumbError(this,${isOwned},${year},${carId})">`;
+}
+
 function getPhotoThumbObserver(){
   if(!photoThumbObserver){
     photoThumbObserver = new IntersectionObserver(entries => {
@@ -255,7 +320,7 @@ async function flushPhotoSignBatch(){
       if(!el.isConnected) return; // row was replaced by a re-render before this resolved
       const isOwned = el.dataset.owned === '1';
       el.outerHTML = url
-        ? `<img src="${url}" alt="" onerror="handlePhotoThumbError(this,${isOwned})">`
+        ? signedPhotoImgHtml(url, isOwned, el.dataset.year, el.dataset.carId)
         : `<span class="car-thumb-icon">${isOwned?'✓':'🚗'}</span>`;
     });
   });
@@ -286,9 +351,9 @@ function carThumbMarkup(car, isOwned){
     const path = `${userId}/${car.year}/${car.id}.jpg`;
     const cachedUrl = getCachedPhotoUrl(path);
     if(cachedUrl){
-      return `<img src="${cachedUrl}" alt="" onerror="handlePhotoThumbError(this,${isOwned})">`;
+      return signedPhotoImgHtml(cachedUrl, isOwned, car.year, car.id);
     }
-    return `<span class="car-thumb-icon" data-photo-path="${path}" data-owned="${isOwned?1:0}">📷</span>`;
+    return `<span class="car-thumb-icon" data-photo-path="${path}" data-owned="${isOwned?1:0}" data-year="${car.year}" data-car-id="${car.id}">📷</span>`;
   }
   return `<span class="car-thumb-icon">${isOwned?'✓':'🚗'}</span>`;
 }
@@ -315,7 +380,8 @@ async function loadPhoto(car){
 
 async function deletePhoto(){
   if(!currentCar || !confirm('Delete photo?')) return;
-  await deletePhotoFromStorage(currentCar.year, currentCar.id);
+  const ok = await deletePhotoFromStorage(currentCar.year, currentCar.id);
+  if(!ok){ alert('Failed to delete photo. Please try again.'); return; }
   loadPhoto(currentCar); render();
 }
 
